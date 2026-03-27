@@ -23,6 +23,8 @@ class DataPortal:
             raise FutureDataAccessError(
                 f"requested={end_open_time}, latest={self._latest_open_time}"
             )
+        if lookback <= 0:
+            raise ValueError(f"lookback must be positive, got {lookback}")
         return (
             self._bars.filter(
                 (pl.col("symbol") == symbol)
