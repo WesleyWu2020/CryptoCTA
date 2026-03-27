@@ -21,6 +21,8 @@ class SmaCrossStrategy(Strategy):
             raise ValueError("fast must be > 0")
         if self.slow <= 0:
             raise ValueError("slow must be > 0")
+        if self.fast >= self.slow:
+            raise ValueError("fast must be < slow")
 
     def on_bar_close(self, context: StrategyContext) -> OrderIntent | None:
         if len(context.bars) < self.slow + 1:
