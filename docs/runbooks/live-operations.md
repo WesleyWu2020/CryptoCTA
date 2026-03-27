@@ -2,10 +2,10 @@
 
 ## Pre-Open Checklist
 
-- Confirm API scopes are limited to the minimum required trading permissions.
-- Verify risk config is loaded and matches the approved live limits.
+- Confirm futures trade/read API permission scopes are limited to the minimum required trading permissions.
+- Verify risk config covers daily max loss, symbol budget, and leverage cap.
 - Confirm the symbol whitelist contains only instruments approved for live trading.
-- Check clock sync on the trading host before market open.
+- Confirm UTC timestamps on the trading host before market open.
 
 ## Runtime Checks
 
