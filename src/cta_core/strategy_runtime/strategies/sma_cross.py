@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import ClassVar
 
 import polars as pl
 
@@ -13,7 +14,13 @@ from cta_core.strategy_runtime.interfaces import Strategy, StrategyContext
 class SmaCrossStrategy(Strategy):
     fast: int
     slow: int
-    strategy_id: str = "sma_cross"
+    strategy_id: ClassVar[str] = "sma_cross"
+
+    def __post_init__(self) -> None:
+        if self.fast <= 0:
+            raise ValueError("fast must be > 0")
+        if self.slow <= 0:
+            raise ValueError("slow must be > 0")
 
     def on_bar_close(self, context: StrategyContext) -> OrderIntent | None:
         if len(context.bars) < self.slow + 1:
