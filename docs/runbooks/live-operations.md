@@ -4,8 +4,8 @@
 
 - Confirm futures trade/read API permission scopes are limited to the minimum required trading permissions.
 - Verify risk config covers daily max loss, symbol budget, and leverage cap.
-- Confirm the symbol whitelist contains only instruments approved for live trading.
-- Confirm UTC timestamps on the trading host before market open.
+- Confirm symbol whitelist matches deployment config.
+- Confirm clock sync and UTC timestamps.
 
 ## Runtime Checks
 
