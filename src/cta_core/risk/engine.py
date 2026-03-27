@@ -47,13 +47,13 @@ class RiskEngine:
         if ctx.equity <= 0:
             return RiskResult(False, "symbol_risk_budget", "equity must be positive")
 
-        ratio = ctx.symbol_notional / ctx.equity
+        ratio = (ctx.symbol_notional + ctx.order_notional) / ctx.equity
         if ratio > self._max_symbol_notional_ratio:
             return RiskResult(
                 False,
                 "symbol_risk_budget",
                 (
-                    f"symbol_notional/equity={ratio} exceeds "
+                    f"(symbol_notional+order_notional)/equity={ratio} exceeds "
                     f"max_symbol_notional_ratio={self._max_symbol_notional_ratio}"
                 ),
             )
