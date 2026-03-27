@@ -1,0 +1,3 @@
+[build]
+rustc = ".cargo/rustc.sh"
+rustdoc = ".cargo/rustdoc.sh"
