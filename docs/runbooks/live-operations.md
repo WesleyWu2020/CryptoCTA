@@ -15,8 +15,8 @@
 
 ## Incident Response
 
-1. Pause new order submission.
-2. Inspect recent logs, metrics, and exchange status.
-3. Reconcile open orders and current positions.
-4. Apply the smallest safe recovery action, such as reconnecting the websocket or restarting the runner.
-5. Resume trading only after the runtime checks are back within limits.
+1. Trigger kill-switch (reduce-only mode).
+2. Snapshot open positions and open orders.
+3. Reconcile with exchange positions.
+4. Restart live runner in recovery mode.
+5. Resume only after metrics normalize.
