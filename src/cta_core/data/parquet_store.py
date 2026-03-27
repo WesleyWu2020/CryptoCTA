@@ -13,4 +13,5 @@ def append_closed_bars(df: pl.DataFrame, path: Path) -> None:
         combined = combined.unique(subset=["symbol", "interval", "open_time"], keep="last")
     else:
         combined = df
+    combined = combined.sort(["symbol", "interval", "open_time"])
     combined.write_parquet(path)
