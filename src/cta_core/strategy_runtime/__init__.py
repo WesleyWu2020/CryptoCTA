@@ -1,4 +1,13 @@
-from .interfaces import Strategy, StrategyContext
+from .base import BacktestPosition, BaseStrategy, StrategyDecision, StrategyDecisionType, StrategyContext
+from .interfaces import Strategy
 from .runtime import run_bar_close
 
-__all__ = ["Strategy", "StrategyContext", "run_bar_close"]
+__all__ = [
+    "BacktestPosition",
+    "BaseStrategy",
+    "Strategy",
+    "StrategyContext",
+    "StrategyDecision",
+    "StrategyDecisionType",
+    "run_bar_close",
+]

@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
-
-import polars as pl
 
 from cta_core.events import OrderIntent
 
-
-@dataclass(frozen=True)
-class StrategyContext:
-    symbol: str
-    bars: pl.DataFrame
+from .base import StrategyContext
 
 
 class Strategy(ABC):
@@ -20,3 +13,5 @@ class Strategy(ABC):
     @abstractmethod
     def on_bar_close(self, context: StrategyContext) -> OrderIntent | None:
         raise NotImplementedError
+
+__all__ = ["Strategy", "StrategyContext"]
