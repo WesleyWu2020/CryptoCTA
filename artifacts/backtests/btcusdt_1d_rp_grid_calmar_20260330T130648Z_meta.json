@@ -1,0 +1,45 @@
+{
+  "symbol": "BTCUSDT",
+  "interval": "1d",
+  "bars": 574,
+  "period_start_open_time": 1725148800000,
+  "period_end_open_time": 1774656000000,
+  "period_days": 573.0,
+  "grid": {
+    "rp_entry_confirm_bars": [
+      2,
+      3,
+      4
+    ],
+    "rp_exit_confirm_bars": [
+      2,
+      3,
+      4
+    ],
+    "regime_ema_window": [
+      20,
+      30,
+      40,
+      60
+    ],
+    "regime_min_slope": [
+      0.0,
+      0.001,
+      0.002,
+      0.003
+    ],
+    "max_hold_bars": [
+      20,
+      40,
+      60
+    ],
+    "risk_per_trade": [
+      0.003,
+      0.005
+    ]
+  },
+  "combos": 864,
+  "calmar_definition": "annual_return / max_drawdown, annual_return=(1+return_pct)^(365/days)-1",
+  "top10_path": "artifacts/backtests/btcusdt_1d_rp_grid_calmar_20260330T130648Z_top10.json",
+  "all_results_path": "artifacts/backtests/btcusdt_1d_rp_grid_calmar_20260330T130648Z_all.csv"
+}
