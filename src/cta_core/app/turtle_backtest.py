@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 import json
 import math
 
 import polars as pl
+
+from cta_core.strategy_runtime.base import StrategyContext, StrategyDecisionType
+from cta_core.strategy_runtime.strategies import RPDailyBreakoutConfig, RPDailyBreakoutStrategy
 
 
 @dataclass(frozen=True)
@@ -343,6 +347,14 @@ def run_turtle_backtest(
         min_position_allocation=min_position_allocation,
     )
     cfg.validate()
+
+    if _can_use_runtime_rp_compat(cfg):
+        return _run_rp_runtime_compat(
+            bars=bars,
+            symbol=symbol,
+            interval=interval,
+            config=cfg,
+        )
 
     return _run_reference_price_strategy(
         bars=bars,
@@ -1551,6 +1563,313 @@ def _run_reference_price_strategy(
                 "realized_pnl": realized_pnl,
             }
         )
+
+    final_equity = cash + position_qty * close[-1]
+    net_pnl = final_equity - config.initial_capital
+    wins = sum(1 for pnl in closed_trade_pnls if pnl > 0)
+    closed_trades = len(closed_trade_pnls)
+    gross_profit = sum(pnl for pnl in closed_trade_pnls if pnl > 0)
+    gross_loss = abs(sum(pnl for pnl in closed_trade_pnls if pnl < 0))
+    profit_factor = None if gross_loss == 0 else gross_profit / gross_loss
+    win_rate = 0.0 if closed_trades == 0 else wins / closed_trades
+
+    return {
+        "symbol": symbol,
+        "interval": interval,
+        "start_open_time": open_time[0],
+        "end_open_time": open_time[-1],
+        "config": _config_dict(config),
+        "summary": {
+            "initial_capital": config.initial_capital,
+            "final_equity": final_equity,
+            "net_pnl": net_pnl,
+            "return_pct": 0.0 if config.initial_capital == 0 else net_pnl / config.initial_capital,
+            "max_drawdown": max_drawdown,
+            "total_trades": len(trades),
+            "closed_trades": closed_trades,
+            "win_rate": win_rate,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
+            "profit_factor": profit_factor,
+            "realized_pnl": realized_pnl,
+            "breakout_entry_alpha_pnl": 0.0,
+            "pullback_entry_alpha_pnl": 0.0,
+            "exit_alpha_pnl": 0.0,
+            "final_position_qty": position_qty,
+            "open_position_side": "LONG" if position_qty > 0 else None,
+        },
+        "trades": trades,
+        "equity_curve": equity_curve,
+    }
+
+
+def _can_use_runtime_rp_compat(config: TurtleConfig) -> bool:
+    return (
+        not config.allow_short
+        and not config.use_htf_filter
+        and not config.use_rp_chop_filter
+        and not config.use_rp_signal_quality_sizing
+        and not config.use_vol_target_sizing
+        and not config.use_regime_filter
+    )
+
+
+def _run_rp_runtime_compat(
+    *,
+    bars: pl.DataFrame,
+    symbol: str,
+    interval: str,
+    config: TurtleConfig,
+) -> dict[str, object]:
+    required_columns = ("open_time", "open", "high", "low", "close")
+    missing_columns = [c for c in required_columns if c not in bars.columns]
+    if missing_columns:
+        missing = ", ".join(missing_columns)
+        raise ValueError(f"bars missing required columns: {missing}")
+
+    frame = bars.sort("open_time")
+
+    open_time = [int(v) for v in frame.get_column("open_time").to_list()]
+    open_price = [float(v) for v in frame.get_column("open").to_list()]
+    high = [float(v) for v in frame.get_column("high").to_list()]
+    low = [float(v) for v in frame.get_column("low").to_list()]
+    close = [float(v) for v in frame.get_column("close").to_list()]
+
+    if not open_time:
+        return _empty_result(symbol=symbol, interval=interval, config=config)
+
+    if "volume" in frame.columns:
+        volume = [max(float(v), 0.0) for v in frame.get_column("volume").to_list()]
+    else:
+        volume = [1.0 for _ in open_time]
+
+    if "quote_volume" in frame.columns:
+        quote_volume = [float(v) for v in frame.get_column("quote_volume").to_list()]
+    elif "quote_asset_volume" in frame.columns:
+        quote_volume = [float(v) for v in frame.get_column("quote_asset_volume").to_list()]
+    else:
+        quote_volume = [float("nan") for _ in open_time]
+
+    vwap: list[float] = []
+    for c, v, q in zip(close, volume, quote_volume):
+        if v > 0 and q == q:
+            vwap.append(q / v)
+        else:
+            vwap.append(c)
+
+    turnover = _turnover_from_volume(
+        volume=volume,
+        window=config.rp_turnover_window,
+        base_turnover=config.rp_base_turnover,
+        max_turnover_cap=config.rp_max_turnover_cap,
+    )
+    reference_price = _reference_price_recursive(vwap=vwap, turnover=turnover)
+    atr = _rolling_mean(values=_true_range(high=high, low=low, close=close), window=config.atr_lookback)
+    warmup = max(
+        1,
+        config.rp_entry_confirm_bars,
+        config.atr_lookback if (config.use_rp_chop_filter or config.use_rp_signal_quality_sizing) else 1,
+        config.rp_slope_bars if config.use_rp_chop_filter else 1,
+    )
+
+    above_rp_streak: list[int] = []
+    below_rp_streak: list[int] = []
+    above_rp_confirmed: list[bool] = []
+    below_rp_confirmed: list[bool] = []
+    above_run = 0
+    below_run = 0
+
+    for close_value, rp_value in zip(close, reference_price):
+        is_above = close_value > rp_value
+        is_below = close_value < rp_value
+
+        if is_above:
+            above_run += 1
+            below_run = 0
+        elif is_below:
+            below_run += 1
+            above_run = 0
+        else:
+            above_run = 0
+            below_run = 0
+
+        above_rp_streak.append(above_run)
+        below_rp_streak.append(below_run)
+        above_rp_confirmed.append(above_run >= config.rp_entry_confirm_bars)
+        below_rp_confirmed.append(below_run >= config.rp_exit_confirm_bars)
+
+    prepared = frame.with_columns(
+        pl.Series("rp", reference_price),
+        pl.Series("close_above_rp", [c > rp for c, rp in zip(close, reference_price)]),
+        pl.Series("close_below_rp", [c < rp for c, rp in zip(close, reference_price)]),
+        pl.Series("above_rp_streak", above_rp_streak),
+        pl.Series("below_rp_streak", below_rp_streak),
+        pl.Series("above_rp_confirmed", above_rp_confirmed),
+        pl.Series("below_rp_confirmed", below_rp_confirmed),
+    )
+
+    strategy = RPDailyBreakoutStrategy(
+        RPDailyBreakoutConfig(
+            entry_confirmations=config.rp_entry_confirm_bars,
+            exit_confirmations=config.rp_exit_confirm_bars,
+            quantity=Decimal("1"),
+        )
+    )
+    strategy.on_start(StrategyContext(symbol=symbol, bars=prepared))
+
+    fee_rate = config.fee_bps / 10000.0
+    slippage_rate = config.slippage_bps / 10000.0
+
+    cash = config.initial_capital
+    position_qty = 0.0
+    position_avg_price = 0.0
+    position_entry_fee = 0.0
+    entry_bar_index: int | None = None
+    last_exit_bar = -10**9
+
+    realized_pnl = 0.0
+    trades: list[dict[str, object]] = []
+    equity_curve: list[dict[str, object]] = []
+    closed_trade_pnls: list[float] = []
+
+    max_equity = config.initial_capital
+    max_drawdown = 0.0
+
+    equity_curve.append(
+        {
+            "open_time": open_time[0],
+            "close": close[0],
+            "equity": cash,
+            "position_qty": position_qty,
+            "stop_price": None,
+            "realized_pnl": realized_pnl,
+        }
+    )
+
+    for fill_index in range(1, len(open_time)):
+        signal_index = fill_index - 1
+        prev_equity = cash + position_qty * close[signal_index]
+        rp_slope_ratio = 0.0
+        atr_ratio = 0.0
+        regime_slope = 0.0
+        atr_prev = atr[signal_index]
+        if signal_index >= config.rp_slope_bars and reference_price[signal_index - config.rp_slope_bars] != 0:
+            rp_slope_ratio = (
+                reference_price[signal_index] - reference_price[signal_index - config.rp_slope_bars]
+            ) / abs(reference_price[signal_index - config.rp_slope_bars])
+        if atr_prev is not None and close[signal_index] > 0:
+            atr_ratio = float(atr_prev) / close[signal_index]
+
+        if position_qty == 0.0:
+            can_check_entry = (
+                signal_index >= warmup
+                and signal_index >= config.rp_entry_confirm_bars - 1
+                and (fill_index - last_exit_bar) > config.cooldown_bars
+            )
+            enter_long = False
+            if can_check_entry:
+                context = StrategyContext(symbol=symbol, bars=prepared.head(signal_index + 1))
+                decisions = strategy.on_bar(context)
+                enter_long = any(d.decision_type == StrategyDecisionType.ENTER_LONG for d in decisions)
+
+            if enter_long:
+                fill = _fill_price(side="BUY", base_price=open_price[fill_index], slippage_rate=slippage_rate)
+                qty = prev_equity * config.max_leverage / (fill * (1.0 + fee_rate)) if fill > 0 else 0.0
+                if qty > 0:
+                    fee = qty * fill * fee_rate
+                    cash -= qty * fill + fee
+                    position_qty = qty
+                    position_avg_price = fill
+                    position_entry_fee = fee
+                    entry_bar_index = fill_index
+
+                    trades.append(
+                        {
+                            "open_time": open_time[fill_index],
+                            "side": "BUY",
+                            "action": "ENTER_LONG_RP2",
+                            "price": fill,
+                            "qty": qty,
+                            "fee": fee,
+                            "rp_value": reference_price[signal_index],
+                            "turnover_prev": turnover[signal_index],
+                            "regime_slope": regime_slope,
+                            "rp_slope_ratio": rp_slope_ratio,
+                            "atr_ratio": atr_ratio,
+                            "signal_quality_scale": 1.0,
+                            "vol_target_allocation": config.max_leverage,
+                            "equity_after": cash + position_qty * close[fill_index],
+                        }
+                    )
+                else:
+                    strategy.set_long_open(symbol=symbol, is_open=False)
+
+        elif position_qty > 0.0:
+            hold_bars = None if entry_bar_index is None else fill_index - entry_bar_index
+            hold_ok = entry_bar_index is None or hold_bars >= max(config.rp_min_hold_bars, 0)
+            time_stop = (
+                config.max_hold_bars is not None
+                and entry_bar_index is not None
+                and hold_bars >= config.max_hold_bars
+            )
+            exit_long = False
+            if not time_stop and hold_ok:
+                context = StrategyContext(symbol=symbol, bars=prepared.head(signal_index + 1))
+                decisions = strategy.on_bar(context)
+                exit_long = any(d.decision_type == StrategyDecisionType.EXIT_LONG for d in decisions)
+
+            if time_stop or (exit_long and hold_ok):
+                fill = _fill_price(side="SELL", base_price=open_price[fill_index], slippage_rate=slippage_rate)
+                qty = abs(position_qty)
+                fee = qty * fill * fee_rate
+                cash += qty * fill - fee
+
+                trade_pnl = (fill - position_avg_price) * qty - position_entry_fee - fee
+                realized_pnl += trade_pnl
+                closed_trade_pnls.append(trade_pnl)
+
+                trades.append(
+                    {
+                        "open_time": open_time[fill_index],
+                        "side": "SELL",
+                        "action": "EXIT_LONG_RP2",
+                        "price": fill,
+                        "qty": qty,
+                        "fee": fee,
+                        "trade_pnl": trade_pnl,
+                        "rp_value": reference_price[signal_index],
+                        "turnover_prev": turnover[signal_index],
+                        "hold_bars": hold_bars,
+                        "exit_reason": "TIME_STOP" if time_stop else "RP_CROSS",
+                        "equity_after": cash,
+                    }
+                )
+
+                position_qty = 0.0
+                position_avg_price = 0.0
+                position_entry_fee = 0.0
+                entry_bar_index = None
+                last_exit_bar = fill_index
+                strategy.set_long_open(symbol=symbol, is_open=False)
+
+        mark_price = close[fill_index]
+        equity = cash + position_qty * mark_price
+        max_equity = max(max_equity, equity)
+        if max_equity > 0:
+            max_drawdown = max(max_drawdown, (max_equity - equity) / max_equity)
+
+        equity_curve.append(
+            {
+                "open_time": open_time[fill_index],
+                "close": mark_price,
+                "equity": equity,
+                "position_qty": position_qty,
+                "stop_price": None,
+                "realized_pnl": realized_pnl,
+            }
+        )
+
+    strategy.on_finish(StrategyContext(symbol=symbol, bars=prepared))
 
     final_equity = cash + position_qty * close[-1]
     net_pnl = final_equity - config.initial_capital

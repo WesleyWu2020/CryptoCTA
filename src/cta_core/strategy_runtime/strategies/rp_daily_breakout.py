@@ -90,7 +90,7 @@ class RPDailyBreakoutStrategy(BaseStrategy):
         )
 
     def on_start(self, context: StrategyContext) -> None:
-        self._long_open_by_symbol[context.symbol] = False
+        self.set_long_open(symbol=context.symbol, is_open=False)
 
     def on_bar(self, context: StrategyContext) -> list[StrategyDecision]:
         if context.bars.height == 0:
@@ -121,7 +121,10 @@ class RPDailyBreakoutStrategy(BaseStrategy):
         return []
 
     def on_finish(self, context: StrategyContext) -> None:
-        self._long_open_by_symbol[context.symbol] = False
+        self.set_long_open(symbol=context.symbol, is_open=False)
+
+    def set_long_open(self, *, symbol: str, is_open: bool) -> None:
+        self._long_open_by_symbol[symbol] = is_open
 
 
 __all__ = ["RPDailyBreakoutConfig", "RPDailyBreakoutStrategy"]

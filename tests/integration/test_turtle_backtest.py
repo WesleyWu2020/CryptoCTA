@@ -3,6 +3,7 @@ import math
 import polars as pl
 import pytest
 
+from cta_core.app import turtle_backtest as turtle_backtest_module
 from cta_core.app.turtle_backtest import run_turtle_backtest
 
 
@@ -60,6 +61,31 @@ def _rp_from_close_and_volume(close: list[float], volume: list[float], window: i
     return rp
 
 
+def _true_range_from_ohlc(high: list[float], low: list[float], close: list[float]) -> list[float]:
+    out: list[float] = []
+    for index, (high_value, low_value) in enumerate(zip(high, low)):
+        if index == 0:
+            out.append(high_value - low_value)
+            continue
+        prev_close = close[index - 1]
+        out.append(max(high_value - low_value, abs(high_value - prev_close), abs(low_value - prev_close)))
+    return out
+
+
+def _rolling_mean(values: list[float], window: int) -> list[float | None]:
+    out: list[float | None] = []
+    running = 0.0
+    for index, value in enumerate(values):
+        running += value
+        if index >= window:
+            running -= values[index - window]
+        if index + 1 < window:
+            out.append(None)
+        else:
+            out.append(running / window)
+    return out
+
+
 def test_daily_rp_break_strategy_generates_entry_and_exit():
     bars = _build_daily_rp_signal_bars()
 
@@ -81,6 +107,112 @@ def test_daily_rp_break_strategy_generates_entry_and_exit():
     assert "ENTER_LONG_RP2" in actions
     assert "EXIT_LONG_RP2" in actions
     assert out["summary"]["closed_trades"] >= 1
+
+
+def test_compatible_rp_config_uses_runtime_path_and_preserves_rp2_contract(monkeypatch: pytest.MonkeyPatch):
+    bars = _build_daily_rp_signal_bars()
+    close = bars.get_column("close").to_list()
+    high = bars.get_column("high").to_list()
+    low = bars.get_column("low").to_list()
+    volume = bars.get_column("volume").to_list()
+
+    def _unexpected_reference_fallback(**_: object) -> dict[str, object]:
+        raise AssertionError("legacy reference strategy should not run for runtime-compatible RP config")
+
+    monkeypatch.setattr(turtle_backtest_module, "_run_reference_price_strategy", _unexpected_reference_fallback)
+
+    out = run_turtle_backtest(
+        bars=bars,
+        symbol="BTCUSDT",
+        interval="1d",
+        use_htf_filter=False,
+        use_regime_filter=False,
+        use_rp_chop_filter=False,
+        use_rp_signal_quality_sizing=False,
+        use_vol_target_sizing=False,
+        rp_entry_confirm_bars=1,
+        rp_exit_confirm_bars=1,
+        cooldown_bars=0,
+        allow_short=False,
+    )
+
+    actions = [t["action"] for t in out["trades"]]
+    assert actions == ["ENTER_LONG_RP2", "EXIT_LONG_RP2"]
+    assert out["summary"]["total_trades"] == 2
+    assert out["summary"]["closed_trades"] == 1
+    assert "final_equity" in out["summary"]
+    assert "win_rate" in out["summary"]
+
+    entry = out["trades"][0]
+    signal_index = bars.get_column("open_time").to_list().index(entry["open_time"]) - 1
+    rp = _rp_from_close_and_volume(close=close, volume=volume, window=100, base_turnover=0.02, max_turnover_cap=0.8)
+    atr = _rolling_mean(_true_range_from_ohlc(high=high, low=low, close=close), window=20)
+    expected_rp_slope_ratio = (rp[signal_index] - rp[signal_index - 3]) / abs(rp[signal_index - 3])
+    expected_atr_ratio = float(atr[signal_index]) / close[signal_index]
+    assert entry["rp_slope_ratio"] == pytest.approx(expected_rp_slope_ratio, rel=1e-9)
+    assert entry["atr_ratio"] == pytest.approx(expected_atr_ratio, rel=1e-9)
+    assert entry["regime_slope"] == 0.0
+
+
+def test_richer_rp_config_still_falls_back_to_legacy_path(monkeypatch: pytest.MonkeyPatch):
+    bars = _build_daily_rp_signal_bars()
+
+    def _unexpected_runtime_compat(**_: object) -> dict[str, object]:
+        raise AssertionError("runtime compat should not run for richer RP configs")
+
+    monkeypatch.setattr(turtle_backtest_module, "_run_rp_runtime_compat", _unexpected_runtime_compat)
+
+    out = run_turtle_backtest(
+        bars=bars,
+        symbol="BTCUSDT",
+        interval="1d",
+        use_htf_filter=False,
+        use_regime_filter=False,
+        use_rp_chop_filter=False,
+        use_rp_signal_quality_sizing=False,
+        use_vol_target_sizing=True,
+        target_annual_vol=0.15,
+        vol_target_window=5,
+        rp_entry_confirm_bars=1,
+        rp_exit_confirm_bars=1,
+        cooldown_bars=0,
+        allow_short=False,
+    )
+
+    assert out["summary"]["total_trades"] > 0
+
+
+def test_quote_volume_runtime_compat_respects_legacy_warmup_before_first_entry():
+    close = [100.0, 99.0, 101.0, 103.0, 100.0, 97.0, 95.0]
+    bars = pl.DataFrame(
+        {
+            "open_time": [i * 86400000 for i in range(len(close))],
+            "open": close,
+            "high": [c + 1.0 for c in close],
+            "low": [c - 1.0 for c in close],
+            "close": close,
+            "volume": [1.0] * len(close),
+            "quote_volume": [50.0, 99.0, 101.0, 103.0, 100.0, 97.0, 95.0],
+        }
+    )
+
+    out = run_turtle_backtest(
+        bars=bars,
+        symbol="BTCUSDT",
+        interval="1d",
+        use_htf_filter=False,
+        use_regime_filter=False,
+        use_rp_chop_filter=False,
+        use_rp_signal_quality_sizing=False,
+        use_vol_target_sizing=False,
+        rp_entry_confirm_bars=1,
+        rp_exit_confirm_bars=1,
+        cooldown_bars=0,
+        allow_short=False,
+    )
+
+    entry = next(t for t in out["trades"] if t["action"] == "ENTER_LONG_RP2")
+    assert entry["open_time"] == bars.get_column("open_time").to_list()[2]
 
 
 def test_single_bar_breakout_uses_next_open_for_fill():
