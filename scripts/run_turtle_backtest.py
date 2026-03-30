@@ -33,6 +33,10 @@ def _matches_option(token: str, option: str) -> bool:
     return token == option or token.startswith(f"{option}=")
 
 
+def _should_skip_forwarded_option(token: str) -> bool:
+    return _matches_option(token, "--strategy") or _matches_option(token, "--preset")
+
+
 def _forward_argv(argv: list[str] | None = None) -> list[str]:
     if argv is None:
         argv = sys.argv[1:]
@@ -49,8 +53,8 @@ def _forward_argv(argv: list[str] | None = None) -> list[str]:
         if skip_next:
             skip_next = False
             continue
-        if _matches_option(token, "--strategy"):
-            if token == "--strategy":
+        if _should_skip_forwarded_option(token):
+            if token in {"--strategy", "--preset"}:
                 skip_next = True
             continue
         forwarded.append(token)

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from cta_core.data.market_data_store import upsert_klines_to_duckdb
 
@@ -136,6 +137,24 @@ def test_unsupported_strategy_execution_fails_clearly():
     assert "strategy execution is not yet supported for 'sma_cross'" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("extra_args", "expected_option"),
+    [
+        (["--disable-htf-filter"], "--disable-htf-filter"),
+        (["--htf-interval", "4h"], "--htf-interval"),
+    ],
+)
+def test_rp_daily_breakout_rejects_unsupported_htf_execution_options(
+    extra_args: list[str],
+    expected_option: str,
+):
+    result = _run_script("--strategy=rp_daily_breakout", *extra_args)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "HTF execution options are not yet supported by the generic runner" in result.stderr
+    assert expected_option in result.stderr
+
+
 def test_turtle_script_forwards_equals_style_strategy_argument(tmp_path: Path):
     db_path = tmp_path / "klines.duckdb"
     output_path = tmp_path / "forwarded.json"
@@ -170,6 +189,40 @@ def test_turtle_script_forwards_equals_style_strategy_argument(tmp_path: Path):
     assert payload["symbol"] == "BTCUSDT"
     assert payload["data_source"] == f"duckdb:{db_path}"
     assert payload["summary"]["closed_trades"] >= 1
+
+
+def test_turtle_script_strips_user_preset_override(tmp_path: Path):
+    db_path = tmp_path / "klines.duckdb"
+    output_path = tmp_path / "preset_stripped.json"
+    _seed_duckdb(db_path)
+
+    result = _run_turtle_script(
+        "--strategy=rp_live",
+        "--preset=unknown_preset",
+        "--symbol",
+        "BTCUSDT",
+        "--interval",
+        "1d",
+        "--start",
+        "1970-01-01",
+        "--end",
+        "1970-02-10",
+        "--db-path",
+        str(db_path),
+        "--output",
+        str(output_path),
+        "--rp-entry-confirm-bars",
+        "1",
+        "--rp-exit-confirm-bars",
+        "1",
+        "--cooldown-bars",
+        "0",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["symbol"] == "BTCUSDT"
+    assert payload["data_source"] == f"duckdb:{db_path}"
 
 
 def test_turtle_script_rejects_unknown_legacy_strategy():

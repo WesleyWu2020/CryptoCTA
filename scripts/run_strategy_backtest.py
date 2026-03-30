@@ -19,6 +19,14 @@ from cta_core.data.market_data_store import fetch_klines_range, utc_ms
 from cta_core.strategy_runtime.registry import build_strategy, list_strategy_ids
 
 _SUPPORTED_EXECUTION_STRATEGIES = {"rp_daily_breakout"}
+_UNSUPPORTED_HTF_EXECUTION_OPTIONS = (
+    "--disable-htf-filter",
+    "--htf-interval",
+    "--htf-entry-lookback",
+    "--htf-expansion-bars",
+    "--htf-expansion-min-growth",
+    "--disable-htf-expansion-filter",
+)
 
 
 def _load_bars_from_duckdb(
@@ -96,6 +104,18 @@ def _matches_option(token: str, option: str) -> bool:
     return token == option or token.startswith(f"{option}=")
 
 
+def _collect_unsupported_execution_options(argv: list[str] | None) -> list[str]:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    used_options: list[str] = []
+    for token in argv:
+        for option in _UNSUPPORTED_HTF_EXECUTION_OPTIONS:
+            if _matches_option(token, option) and option not in used_options:
+                used_options.append(option)
+    return used_options
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     bootstrap = _bootstrap_args(argv)
 
@@ -110,7 +130,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--symbol", default="BTCUSDT")
     parser.add_argument("--interval", default="1d")
-    parser.add_argument("--htf-interval", default="1d")
+    parser.add_argument("--htf-interval", default="1d", help="not yet supported by the generic runner")
     parser.add_argument("--start", default="2024-09-01")
     parser.add_argument("--end", default="2026-03-16", help="exclusive date; use 2026-03-16 for up to 2026-03-15")
     parser.add_argument("--db-path", type=Path, default=Path("artifacts/market_data/klines.duckdb"))
@@ -187,11 +207,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--vol-target-window", type=int, default=20)
     parser.add_argument("--min-position-allocation", type=float, default=0.2)
 
-    parser.add_argument("--disable-htf-filter", action="store_true")
-    parser.add_argument("--htf-entry-lookback", type=int, default=20)
-    parser.add_argument("--htf-expansion-bars", type=int, default=3)
-    parser.add_argument("--htf-expansion-min-growth", type=float, default=1.05)
-    parser.add_argument("--disable-htf-expansion-filter", action="store_true")
+    parser.add_argument("--disable-htf-filter", action="store_true", help="not yet supported by the generic runner")
+    parser.add_argument("--htf-entry-lookback", type=int, default=20, help="not yet supported by the generic runner")
+    parser.add_argument("--htf-expansion-bars", type=int, default=3, help="not yet supported by the generic runner")
+    parser.add_argument(
+        "--htf-expansion-min-growth",
+        type=float,
+        default=1.05,
+        help="not yet supported by the generic runner",
+    )
+    parser.add_argument(
+        "--disable-htf-expansion-filter",
+        action="store_true",
+        help="not yet supported by the generic runner",
+    )
 
     parser.add_argument(
         "--output",
@@ -391,6 +420,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.strategy not in _SUPPORTED_EXECUTION_STRATEGIES:
         print(
             f"strategy execution is not yet supported for '{args.strategy}'; supported: rp_daily_breakout",
+            file=sys.stderr,
+        )
+        return 2
+
+    unsupported_options = _collect_unsupported_execution_options(argv)
+    if unsupported_options:
+        print(
+            "HTF execution options are not yet supported by the generic runner: "
+            + ", ".join(unsupported_options),
             file=sys.stderr,
         )
         return 2
