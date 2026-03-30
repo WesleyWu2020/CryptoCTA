@@ -1,0 +1,491 @@
+{
+  "symbol": "BTCUSDT",
+  "interval": "1d",
+  "start_open_time": 1769904000000,
+  "end_open_time": 1773532800000,
+  "config": {
+    "entry_lookback": 55,
+    "exit_lookback": 20,
+    "atr_lookback": 20,
+    "initial_capital": 100000.0,
+    "risk_per_trade": 0.005,
+    "fee_bps": 5.0,
+    "slippage_bps": 1.0,
+    "stop_atr_multiple": 2.0,
+    "max_leverage": 1.0,
+    "allow_short": false,
+    "trend_ema_window": 200,
+    "cooldown_bars": 4,
+    "pullback_window": 12,
+    "pullback_tolerance_atr": 0.25,
+    "require_channel_expansion": true,
+    "expansion_bars": 3,
+    "expansion_min_growth": 1.05,
+    "breakout_entry_fraction": 0.35,
+    "use_trend_strength_layering": true,
+    "strong_trend_threshold": 6.0,
+    "weak_exit_lookback": null,
+    "strong_exit_lookback": null,
+    "weak_pullback_tolerance_atr": null,
+    "strong_pullback_tolerance_atr": null,
+    "weak_trend_pullback_only": false,
+    "weak_trend_no_trade": false,
+    "add_on_only_after_profit": false,
+    "addon_min_unrealized_r": 0.5,
+    "min_breakout_distance_atr": 0.15,
+    "min_breakout_body_atr": 0.25,
+    "enable_partial_take_profit": false,
+    "take_profit_r_multiple": 1.0,
+    "take_profit_fraction": 0.5,
+    "use_signal_score_filter": true,
+    "min_signal_score_ratio": 0.6,
+    "min_position_scale": 0.35,
+    "follow_through_bars": 2,
+    "follow_through_max_wait_bars": 3,
+    "max_hold_bars": 40,
+    "use_htf_filter": false,
+    "htf_entry_lookback": 20,
+    "htf_expansion_bars": 3,
+    "htf_expansion_min_growth": 1.05,
+    "htf_require_channel_expansion": true,
+    "rp_turnover_window": 100,
+    "rp_base_turnover": 0.02,
+    "rp_max_turnover_cap": 0.8,
+    "rp_entry_confirm_bars": 3,
+    "rp_exit_confirm_bars": 3,
+    "rp_entry_band_atr": 0.0,
+    "rp_exit_band_atr": 0.0,
+    "rp_min_hold_bars": 0,
+    "rp_htf_slope_bars": 1,
+    "use_rp_chop_filter": false,
+    "rp_slope_bars": 3,
+    "rp_min_slope_ratio": 0.0005,
+    "rp_min_atr_ratio": 0.008,
+    "use_rp_signal_quality_sizing": false,
+    "rp_quality_target_atr": 1.0,
+    "rp_quality_min_scale": 0.35,
+    "use_regime_filter": true,
+    "regime_ema_window": 30,
+    "regime_slope_bars": 3,
+    "regime_min_slope": 0.002,
+    "use_vol_target_sizing": false,
+    "target_annual_vol": 0.15,
+    "vol_target_window": 20,
+    "min_position_allocation": 0.2
+  },
+  "summary": {
+    "initial_capital": 100000.0,
+    "final_equity": 93010.57687203687,
+    "net_pnl": -6989.423127963135,
+    "return_pct": -0.06989423127963135,
+    "max_drawdown": 0.09342019443208992,
+    "total_trades": 3,
+    "closed_trades": 1,
+    "win_rate": 0.0,
+    "gross_profit": 0,
+    "gross_loss": 9342.01944320898,
+    "profit_factor": 0.0,
+    "realized_pnl": -9342.01944320898,
+    "breakout_entry_alpha_pnl": 0.0,
+    "pullback_entry_alpha_pnl": 0.0,
+    "exit_alpha_pnl": 0.0,
+    "final_position_qty": 1.2779882201027617,
+    "open_position_side": "LONG"
+  },
+  "trades": [
+    {
+      "open_time": 1772668800000,
+      "side": "BUY",
+      "action": "ENTER_LONG_RP2",
+      "price": 72648.66414,
+      "qty": 1.3757999017696219,
+      "fee": 49.97501249375312,
+      "rp_value": 67852.42293942062,
+      "turnover_prev": 0.5659547768886175,
+      "regime_slope": 0.002734813007780078,
+      "rp_slope_ratio": 0.017063949212981325,
+      "atr_ratio": 0.04351072528888485,
+      "signal_quality_scale": 1.0,
+      "vol_target_allocation": 1.0,
+      "equity_after": 97482.0268799062
+    },
+    {
+      "open_time": 1773014400000,
+      "side": "SELL",
+      "action": "EXIT_LONG_RP2",
+      "price": 65927.70657000001,
+      "qty": 1.3757999017696219,
+      "fee": 45.35166611145123,
+      "trade_pnl": -9342.01944320898,
+      "rp_value": 69557.55001489536,
+      "turnover_prev": 0.2520169283308501,
+      "hold_bars": 4,
+      "exit_reason": "RP_CROSS",
+      "equity_after": 90657.98055679101
+    },
+    {
+      "open_time": 1773446400000,
+      "side": "BUY",
+      "action": "ENTER_LONG_RP2",
+      "price": 70902.58955,
+      "qty": 1.2779882201027617,
+      "fee": 45.30633710984059,
+      "rp_value": 69809.93125175915,
+      "turnover_prev": 0.5002913877556138,
+      "regime_slope": 0.004291271695257996,
+      "rp_slope_ratio": 0.018505994342429187,
+      "atr_ratio": 0.047535950800826586,
+      "signal_quality_scale": 1.0,
+      "vol_target_allocation": 1.0,
+      "equity_after": 90960.04477288199
+    }
+  ],
+  "equity_curve": [
+    {
+      "open_time": 1769904000000,
+      "close": 76931.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1769990400000,
+      "close": 78692.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770076800000,
+      "close": 75732.4,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770163200000,
+      "close": 73137.4,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770249600000,
+      "close": 62868.1,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770336000000,
+      "close": 70544.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770422400000,
+      "close": 69254.2,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770508800000,
+      "close": 70288.1,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770595200000,
+      "close": 70110.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770681600000,
+      "close": 68805.3,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770768000000,
+      "close": 67054.4,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770854400000,
+      "close": 66243.1,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1770940800000,
+      "close": 68821.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771027200000,
+      "close": 69795.4,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771113600000,
+      "close": 68796.9,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771200000000,
+      "close": 68862.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771286400000,
+      "close": 67475.9,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771372800000,
+      "close": 66422.8,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771459200000,
+      "close": 66974.0,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771545600000,
+      "close": 67979.3,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771632000000,
+      "close": 67933.1,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771718400000,
+      "close": 67613.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771804800000,
+      "close": 64625.8,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771891200000,
+      "close": 64031.3,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1771977600000,
+      "close": 67952.5,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772064000000,
+      "close": 67448.2,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772150400000,
+      "close": 65836.0,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772236800000,
+      "close": 66937.1,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772323200000,
+      "close": 65750.0,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772409600000,
+      "close": 68801.8,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772496000000,
+      "close": 68295.3,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772582400000,
+      "close": 72641.4,
+      "equity": 100000.0,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772668800000,
+      "close": 70854.8,
+      "equity": 97482.0268799062,
+      "position_qty": 1.3757999017696219,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772755200000,
+      "close": 68083.0,
+      "equity": 93668.58471218117,
+      "position_qty": 1.3757999017696219,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772841600000,
+      "close": 67232.1,
+      "equity": 92497.9165757654,
+      "position_qty": 1.3757999017696219,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1772928000000,
+      "close": 65934.3,
+      "equity": 90712.40346324879,
+      "position_qty": 1.3757999017696219,
+      "stop_price": null,
+      "realized_pnl": 0.0
+    },
+    {
+      "open_time": 1773014400000,
+      "close": 68394.1,
+      "equity": 90657.98055679101,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    },
+    {
+      "open_time": 1773100800000,
+      "close": 69901.9,
+      "equity": 90657.98055679101,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    },
+    {
+      "open_time": 1773187200000,
+      "close": 70150.0,
+      "equity": 90657.98055679101,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    },
+    {
+      "open_time": 1773273600000,
+      "close": 70480.1,
+      "equity": 90657.98055679101,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    },
+    {
+      "open_time": 1773360000000,
+      "close": 70895.5,
+      "equity": 90657.98055679101,
+      "position_qty": 0.0,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    },
+    {
+      "open_time": 1773446400000,
+      "close": 71174.4,
+      "equity": 90960.04477288199,
+      "position_qty": 1.2779882201027617,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    },
+    {
+      "open_time": 1773532800000,
+      "close": 72778.9,
+      "equity": 93010.57687203687,
+      "position_qty": 1.2779882201027617,
+      "stop_price": null,
+      "realized_pnl": -9342.01944320898
+    }
+  ],
+  "data_source": "duckdb:artifacts/market_data/klines.duckdb",
+  "data_source_htf": null
+}
