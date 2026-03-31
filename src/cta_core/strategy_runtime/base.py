@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
@@ -65,4 +66,12 @@ class BaseStrategy(Protocol):
         ...
 
     def on_finish(self, context: StrategyContext) -> None:
+        ...
+
+    @classmethod
+    def register_cli_args(cls, parser: argparse.ArgumentParser) -> None:
+        ...
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> Any:
         ...

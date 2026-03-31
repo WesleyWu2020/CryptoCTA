@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import ClassVar
@@ -45,3 +46,12 @@ class SmaCrossStrategy(Strategy):
     @staticmethod
     def _tail_mean(close: pl.Series, window: int) -> float:
         return float(close.tail(window).mean())
+
+    @classmethod
+    def register_cli_args(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--fast", type=int, default=10)
+        parser.add_argument("--slow", type=int, default=20)
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> SmaCrossStrategy:
+        return cls(fast=args.fast, slow=args.slow)

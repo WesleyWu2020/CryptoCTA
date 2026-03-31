@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import sys
 
-from cta_core.strategy_runtime.registry import build_strategy, list_strategy_ids
+from cta_core.strategy_runtime.registry import build_strategy, get_strategy_class, list_strategy_ids
 
 from .constants import SUPPORTED_EXECUTION_STRATEGIES, UNSUPPORTED_HTF_EXECUTION_OPTIONS
 from .execution import execute_rp_daily_breakout
-from .parser import matches_option, parse_args
+from .parser import parse_args
+
+
+def _matches_option(token: str, option: str) -> bool:
+    return token == option or token.startswith(f"{option}=")
 
 
 def _should_execute(argv: list[str] | None) -> bool:
@@ -16,7 +20,7 @@ def _should_execute(argv: list[str] | None) -> bool:
     index = 0
     while index < len(argv):
         token = argv[index]
-        if matches_option(token, "--strategy"):
+        if _matches_option(token, "--strategy"):
             index += 1 if token.startswith("--strategy=") else 2
             continue
         if token == "--list-strategies":
@@ -33,7 +37,7 @@ def _collect_unsupported_execution_options(argv: list[str] | None) -> list[str]:
     used_options: list[str] = []
     for token in argv:
         for option in UNSUPPORTED_HTF_EXECUTION_OPTIONS:
-            if matches_option(token, option) and option not in used_options:
+            if _matches_option(token, option) and option not in used_options:
                 used_options.append(option)
     return used_options
 
