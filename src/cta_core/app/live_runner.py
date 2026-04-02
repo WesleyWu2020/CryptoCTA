@@ -29,13 +29,36 @@ def decision_to_intent(
     symbol: str,
     decision: StrategyDecision,
     position_qty: Decimal | None = None,
+    latest_price: Decimal | None = None,
+    equity: Decimal | None = None,
+    max_leverage: Decimal = Decimal("1"),
+    fee_bps: Decimal = Decimal("0"),
 ) -> OrderIntent | None:
     if decision.decision_type == StrategyDecisionType.ENTER_LONG:
+        if latest_price is None or equity is None:
+            raise ValueError("ENTER_LONG requires latest_price and equity for leverage-scaled sizing")
+        if latest_price <= Decimal("0"):
+            raise ValueError("latest_price must be > 0")
+        if equity <= Decimal("0"):
+            raise ValueError("equity must be > 0")
+        if max_leverage <= Decimal("0"):
+            raise ValueError("max_leverage must be > 0")
+        if fee_bps < Decimal("0"):
+            raise ValueError("fee_bps must be >= 0")
+
+        fee_rate = fee_bps / Decimal("10000")
+        denominator = latest_price * (Decimal("1") + fee_rate)
+        if denominator <= Decimal("0"):
+            raise ValueError("invalid denominator while mapping ENTER_LONG quantity")
+        quantity = equity * max_leverage * decision.size / denominator
+        if quantity <= Decimal("0"):
+            raise ValueError("ENTER_LONG mapped quantity must be > 0")
+
         return OrderIntent(
             strategy_id=strategy_id,
             symbol=symbol,
             side=Side.BUY,
-            quantity=decision.size,
+            quantity=quantity,
             order_type="MARKET",
         )
     if decision.decision_type == StrategyDecisionType.EXIT_LONG:
@@ -67,11 +90,22 @@ def run_once(
     symbol: str,
     dry_run: bool = False,
     position_qty: Decimal | None = None,
+    equity: Decimal | None = None,
+    max_leverage: Decimal = Decimal("1"),
+    fee_bps: Decimal = Decimal("0"),
+    risk_engine: RiskEngine | None = None,
+    day_pnl: Decimal = Decimal("0"),
+    losing_streak: int = 0,
+    symbol_notional: Decimal = Decimal("0"),
 ) -> dict[str, Any]:
     if "open_time" not in bars.columns:
         raise ValueError("bars must contain open_time")
     if "close" not in bars.columns:
         raise ValueError("bars must contain close")
+    if not dry_run and risk_engine is None:
+        raise ValueError("risk_engine is required when dry_run is False")
+    if not dry_run and equity is None:
+        raise ValueError("equity is required when dry_run is False")
 
     sorted_bars = bars.sort("open_time")
     prepared_bars = strategy.prepare_features(sorted_bars)
@@ -82,13 +116,49 @@ def run_once(
     decisions = strategy.on_bar(latest_context)
 
     submitted_intents: list[dict[str, Any]] = []
+    risk_rejections: list[dict[str, Any]] = []
     latest_open_time = int(latest_bar.get_column("open_time").item()) if latest_bar.height > 0 else None
+    latest_close = Decimal(str(latest_bar.get_column("close").item())) if latest_bar.height > 0 else None
 
     for decision in decisions:
-        intent = decision_to_intent(strategy.strategy_id, symbol, decision, position_qty=position_qty)
+        if dry_run:
+            continue
+        intent = decision_to_intent(
+            strategy.strategy_id,
+            symbol,
+            decision,
+            position_qty=position_qty,
+            latest_price=latest_close,
+            equity=equity,
+            max_leverage=max_leverage,
+            fee_bps=fee_bps,
+        )
         if intent is None:
             continue
-        if dry_run:
+        order_notional = Decimal("0")
+        if intent.side == Side.BUY:
+            if latest_close is None:
+                raise ValueError("latest close is required for risk checks")
+            order_notional = intent.quantity * latest_close
+        risk_result = check_risk(
+            risk_engine,
+            RiskContext(
+                symbol=symbol,
+                order_notional=order_notional,
+                equity=equity,
+                day_pnl=day_pnl,
+                losing_streak=losing_streak,
+                symbol_notional=symbol_notional,
+            ),
+        )
+        if not risk_result.allowed:
+            risk_rejections.append(
+                {
+                    "decision_type": decision.decision_type.value,
+                    "rule": risk_result.rule,
+                    "detail": risk_result.detail,
+                }
+            )
             continue
         response = adapter.submit_order(intent=intent, ts_ms=latest_open_time)
         submitted_intents.append(
@@ -106,6 +176,7 @@ def run_once(
         "latest_open_time": latest_open_time,
         "decisions_count": len(decisions),
         "submit_count": len(submitted_intents),
+        "risk_rejections": risk_rejections,
         "decisions": [
             {
                 "decision_type": decision.decision_type.value,

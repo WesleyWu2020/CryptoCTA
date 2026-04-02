@@ -74,14 +74,30 @@ class EnterLongStrategy:
 def test_decision_to_intent_maps_enter_long() -> None:
     decision = StrategyDecision(decision_type=StrategyDecisionType.ENTER_LONG, size=Decimal("0.5"))
 
-    intent = live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
+    intent = live_runner.decision_to_intent(
+        "rp_daily_breakout",
+        "BTCUSDT",
+        decision,
+        latest_price=Decimal("100"),
+        equity=Decimal("1000"),
+        max_leverage=Decimal("2"),
+        fee_bps=Decimal("10"),
+    )
 
     assert intent is not None
     assert intent.strategy_id == "rp_daily_breakout"
     assert intent.symbol == "BTCUSDT"
     assert intent.side is Side.BUY
-    assert intent.quantity == Decimal("0.5")
+    expected_qty = Decimal("1000") * Decimal("2") * Decimal("0.5") / (Decimal("100") * Decimal("1.001"))
+    assert float(intent.quantity) == pytest.approx(float(expected_qty), rel=1e-12)
     assert intent.order_type == "MARKET"
+
+
+def test_decision_to_intent_enter_long_requires_sizing_context() -> None:
+    decision = StrategyDecision(decision_type=StrategyDecisionType.ENTER_LONG, size=Decimal("0.5"))
+
+    with pytest.raises(ValueError, match="requires latest_price and equity"):
+        live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
 
 
 def test_decision_to_intent_maps_exit_long_with_explicit_size() -> None:
@@ -198,12 +214,67 @@ def test_run_once_non_dry_submit_uses_latest_open_time() -> None:
         bars=bars,
         symbol="BTCUSDT",
         dry_run=False,
+        equity=Decimal("1000"),
+        max_leverage=Decimal("1"),
+        risk_engine=RiskEngine(max_daily_loss=Decimal("1000"), max_symbol_notional_ratio=Decimal("2")),
     )
 
     assert result["decisions_count"] == 1
     assert result["submit_count"] == 1
     assert len(adapter.submitted) == 1
     assert adapter.submitted[0]["ts_ms"] == 3_000
+    intent = adapter.submitted[0]["intent"]
+    assert float(intent.quantity) == pytest.approx(1000.0 / 13.0, rel=1e-12)
+
+
+def test_run_once_non_dry_requires_risk_engine() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [2_000, 3_000, 1_000],
+            "close": [12.0, 13.0, 10.0],
+        }
+    )
+    strategy = EnterLongStrategy()
+    adapter = DummyAdapter()
+
+    with pytest.raises(ValueError, match="risk_engine is required"):
+        live_runner.run_once(
+            strategy=strategy,
+            adapter=adapter,
+            bars=bars,
+            symbol="BTCUSDT",
+            dry_run=False,
+            equity=Decimal("1000"),
+            max_leverage=Decimal("1"),
+        )
+
+
+def test_run_once_non_dry_skips_submit_when_risk_rejects() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [2_000, 3_000, 1_000],
+            "close": [12.0, 13.0, 10.0],
+        }
+    )
+    strategy = EnterLongStrategy()
+    adapter = DummyAdapter()
+
+    result = live_runner.run_once(
+        strategy=strategy,
+        adapter=adapter,
+        bars=bars,
+        symbol="BTCUSDT",
+        dry_run=False,
+        equity=Decimal("1000"),
+        max_leverage=Decimal("1"),
+        risk_engine=RiskEngine(max_daily_loss=Decimal("1000"), max_symbol_notional_ratio=Decimal("0.1")),
+    )
+
+    assert result["decisions_count"] == 1
+    assert result["submit_count"] == 0
+    assert adapter.submitted == []
+    assert len(result["risk_rejections"]) == 1
+    assert result["risk_rejections"][0]["rule"] == "symbol_risk_budget"
 
 
 def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:
