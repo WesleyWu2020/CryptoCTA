@@ -149,7 +149,7 @@ def test_rp_daily_breakout_executes_and_writes_output(tmp_path: Path):
     assert payload["summary"]["closed_trades"] >= 1
 
 
-def test_rp_native_args_change_entry_timing_and_size(tmp_path: Path):
+def test_rp_native_quantity_changes_position_size(tmp_path: Path):
     db_path = tmp_path / "klines.duckdb"
     output_a = tmp_path / "backtest_a.json"
     output_b = tmp_path / "backtest_b.json"
@@ -170,8 +170,6 @@ def test_rp_native_args_change_entry_timing_and_size(tmp_path: Path):
         str(db_path),
         "--output",
         str(output_a),
-        "--rp-window",
-        "1",
         "--quantity",
         "1",
     )
@@ -190,8 +188,6 @@ def test_rp_native_args_change_entry_timing_and_size(tmp_path: Path):
         str(db_path),
         "--output",
         str(output_b),
-        "--rp-window",
-        "5",
         "--quantity",
         "0.2",
     )
@@ -202,8 +198,36 @@ def test_rp_native_args_change_entry_timing_and_size(tmp_path: Path):
     payload_a = json.loads(output_a.read_text(encoding="utf-8"))
     payload_b = json.loads(output_b.read_text(encoding="utf-8"))
 
-    assert payload_a["trades"][0]["open_time"] != payload_b["trades"][0]["open_time"]
     assert payload_a["trades"][0]["qty"] != payload_b["trades"][0]["qty"]
+
+
+def test_rp_window_is_rejected_in_compat_execution(tmp_path: Path):
+    db_path = tmp_path / "klines.duckdb"
+    output_path = tmp_path / "backtest.json"
+    _seed_duckdb(db_path)
+
+    result = _run_script(
+        "--strategy",
+        "rp_daily_breakout",
+        "--symbol",
+        "BTCUSDT",
+        "--interval",
+        "1d",
+        "--start",
+        "1970-01-01",
+        "--end",
+        "1970-02-10",
+        "--db-path",
+        str(db_path),
+        "--output",
+        str(output_path),
+        "--rp-window",
+        "5",
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "rp_window is not supported in turtle compatibility execution" in result.stderr
 
 
 def test_unsupported_strategy_execution_fails_clearly():

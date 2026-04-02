@@ -1538,12 +1538,19 @@ def _run_rp_runtime_compat(
         else:
             vwap.append(c)
 
+    if config.rp_window != 3:
+        raise ValueError(
+            "rp_window is not supported in turtle compatibility execution; "
+            "use the generic strategy runtime for rp_window-sensitive behavior"
+        )
+
     turnover = _turnover_from_volume(
         volume=volume,
         window=config.rp_turnover_window,
         base_turnover=config.rp_base_turnover,
         max_turnover_cap=config.rp_max_turnover_cap,
     )
+    reference_price = _reference_price_recursive(vwap=vwap, turnover=turnover)
     atr = _rolling_mean(values=_true_range(high=high, low=low, close=close), window=config.atr_lookback)
     warmup = max(
         1,
@@ -1552,16 +1559,49 @@ def _run_rp_runtime_compat(
         config.rp_slope_bars if config.use_rp_chop_filter else 1,
     )
 
+    above_rp_streak: list[int] = []
+    below_rp_streak: list[int] = []
+    above_rp_confirmed: list[bool] = []
+    below_rp_confirmed: list[bool] = []
+    above_run = 0
+    below_run = 0
+
+    for close_value, rp_value in zip(close, reference_price):
+        is_above = close_value > rp_value
+        is_below = close_value < rp_value
+
+        if is_above:
+            above_run += 1
+            below_run = 0
+        elif is_below:
+            below_run += 1
+            above_run = 0
+        else:
+            above_run = 0
+            below_run = 0
+
+        above_rp_streak.append(above_run)
+        below_rp_streak.append(below_run)
+        above_rp_confirmed.append(above_run >= config.rp_entry_confirm_bars)
+        below_rp_confirmed.append(below_run >= config.rp_exit_confirm_bars)
+
+    prepared = frame.with_columns(
+        pl.Series("rp", reference_price),
+        pl.Series("close_above_rp", [c > rp for c, rp in zip(close, reference_price)]),
+        pl.Series("close_below_rp", [c < rp for c, rp in zip(close, reference_price)]),
+        pl.Series("above_rp_streak", above_rp_streak),
+        pl.Series("below_rp_streak", below_rp_streak),
+        pl.Series("above_rp_confirmed", above_rp_confirmed),
+        pl.Series("below_rp_confirmed", below_rp_confirmed),
+    )
+
     strategy = RPDailyBreakoutStrategy(
         RPDailyBreakoutConfig(
-            rp_window=config.rp_window,
             entry_confirmations=config.rp_entry_confirm_bars,
             exit_confirmations=config.rp_exit_confirm_bars,
             quantity=config.rp_quantity,
         )
     )
-    prepared = strategy.prepare_features(frame)
-    reference_price = [float(v) for v in prepared.get_column("rp").to_list()]
     strategy.on_start(StrategyContext(symbol=symbol, bars=prepared))
 
     fee_rate = config.fee_bps / 10000.0
