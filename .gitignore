@@ -1,1 +1,2 @@
 .worktrees/
+artifacts/market_data/*.duckdb
