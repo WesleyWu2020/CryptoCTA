@@ -122,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     config = LiveRunConfig.from_argv(argv)
     validate_live_mode(dry_run=config.dry_run, api_key=config.api_key, api_secret=config.api_secret)
     strategy = build_strategy(config.strategy_id)
-    bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
+    if not config.dry_run:
+        bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
     print(f"live_runner startup strategy={strategy.strategy_id} symbol={config.symbol} dry_run={config.dry_run}")
     return 0
 

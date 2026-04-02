@@ -229,6 +229,54 @@ def test_validate_live_mode_requires_credentials_without_dry_run() -> None:
         live_runner.validate_live_mode(dry_run=False, api_key="", api_secret="")
 
 
+def test_main_dry_run_does_not_bootstrap_live_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = False
+
+    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> object:
+        nonlocal called
+        called = True
+        raise AssertionError("bootstrap_live_runner should not be called in dry-run mode")
+
+    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+
+    result = live_runner.main(["--strategy", "rp_daily_breakout", "--dry-run"])
+
+    assert result == 0
+    assert called is False
+
+
+def test_main_non_dry_run_bootstraps_live_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+    def fake_build_strategy(strategy_id: str) -> object:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> object:
+        calls.append((api_key, api_secret))
+        return object()
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+
+    result = live_runner.main(
+        [
+            "--strategy",
+            "rp_daily_breakout",
+            "--api-key",
+            "key",
+            "--api-secret",
+            "secret",
+        ]
+    )
+
+    assert result == 0
+    assert calls == [("key", "secret")]
+
+
 def test_live_run_config_from_args() -> None:
     config = LiveRunConfig.from_argv(
         [
