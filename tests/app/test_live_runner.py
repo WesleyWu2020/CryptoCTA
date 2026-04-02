@@ -224,6 +224,11 @@ def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:
     assert "exceeds" in result.detail
 
 
+def test_validate_live_mode_requires_credentials_without_dry_run() -> None:
+    with pytest.raises(ValueError, match="api_key and api_secret"):
+        live_runner.validate_live_mode(dry_run=False, api_key="", api_secret="")
+
+
 def test_live_run_config_from_args() -> None:
     config = LiveRunConfig.from_argv(
         [

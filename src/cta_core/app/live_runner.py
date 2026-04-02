@@ -10,10 +10,18 @@ from cta_core.execution.live_binance import LiveBinanceAdapter
 from cta_core.app.live_config import LiveRunConfig
 from cta_core.risk import RiskContext, RiskEngine, RiskResult
 from cta_core.strategy_runtime import BaseStrategy, StrategyContext, StrategyDecision, StrategyDecisionType
+from cta_core.strategy_runtime.registry import build_strategy
 
 
 def bootstrap_live_runner(api_key: str, api_secret: str) -> LiveBinanceAdapter:
     return LiveBinanceAdapter(api_key=api_key, api_secret=api_secret)
+
+
+def validate_live_mode(*, dry_run: bool, api_key: str, api_secret: str) -> None:
+    if dry_run:
+        return
+    if not api_key or not api_secret:
+        raise ValueError("api_key and api_secret are required when dry_run is False")
 
 
 def decision_to_intent(
@@ -112,11 +120,18 @@ def run_once(
 
 def main(argv: list[str] | None = None) -> int:
     config = LiveRunConfig.from_argv(argv)
-    if config.dry_run:
-        return 0
-
+    validate_live_mode(dry_run=config.dry_run, api_key=config.api_key, api_secret=config.api_secret)
+    strategy = build_strategy(config.strategy_id)
     bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
+    print(f"live_runner startup strategy={strategy.strategy_id} symbol={config.symbol} dry_run={config.dry_run}")
     return 0
 
 
-__all__ = ["bootstrap_live_runner", "check_risk", "decision_to_intent", "main", "run_once"]
+__all__ = [
+    "bootstrap_live_runner",
+    "check_risk",
+    "decision_to_intent",
+    "main",
+    "run_once",
+    "validate_live_mode",
+]
