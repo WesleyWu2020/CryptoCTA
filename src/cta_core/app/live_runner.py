@@ -13,7 +13,12 @@ def bootstrap_live_runner(api_key: str, api_secret: str) -> LiveBinanceAdapter:
     return LiveBinanceAdapter(api_key=api_key, api_secret=api_secret)
 
 
-def decision_to_intent(strategy_id: str, symbol: str, decision: StrategyDecision) -> OrderIntent | None:
+def decision_to_intent(
+    strategy_id: str,
+    symbol: str,
+    decision: StrategyDecision,
+    position_qty: Decimal | None = None,
+) -> OrderIntent | None:
     if decision.decision_type == StrategyDecisionType.ENTER_LONG:
         return OrderIntent(
             strategy_id=strategy_id,
@@ -23,13 +28,17 @@ def decision_to_intent(strategy_id: str, symbol: str, decision: StrategyDecision
             order_type="MARKET",
         )
     if decision.decision_type == StrategyDecisionType.EXIT_LONG:
-        if decision.size <= Decimal("0"):
-            return None
+        if decision.size > Decimal("0"):
+            quantity = decision.size
+        elif position_qty is not None and position_qty > Decimal("0"):
+            quantity = position_qty
+        else:
+            raise ValueError("cannot map EXIT_LONG without positive size/position qty")
         return OrderIntent(
             strategy_id=strategy_id,
             symbol=symbol,
             side=Side.SELL,
-            quantity=decision.size,
+            quantity=quantity,
             order_type="MARKET",
         )
     return None

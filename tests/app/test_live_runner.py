@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from cta_core.app import live_runner
 from cta_core.app.live_config import LiveRunConfig
 from cta_core.events import Side
@@ -20,12 +22,42 @@ def test_decision_to_intent_maps_enter_long() -> None:
     assert intent.order_type == "MARKET"
 
 
-def test_decision_to_intent_returns_none_for_exit_long_with_zero_size() -> None:
-    decision = StrategyDecision(decision_type=StrategyDecisionType.EXIT_LONG, size=Decimal("0"))
+def test_decision_to_intent_maps_exit_long_with_explicit_size() -> None:
+    decision = StrategyDecision(decision_type=StrategyDecisionType.EXIT_LONG, size=Decimal("0.25"))
 
     intent = live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
 
-    assert intent is None
+    assert intent is not None
+    assert intent.strategy_id == "rp_daily_breakout"
+    assert intent.symbol == "BTCUSDT"
+    assert intent.side is Side.SELL
+    assert intent.quantity == Decimal("0.25")
+    assert intent.order_type == "MARKET"
+
+
+def test_decision_to_intent_raises_for_exit_long_without_quantity_context() -> None:
+    decision = StrategyDecision(decision_type=StrategyDecisionType.EXIT_LONG, size=Decimal("0"))
+
+    with pytest.raises(ValueError, match="cannot map EXIT_LONG without positive size/position qty"):
+        live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
+
+
+def test_decision_to_intent_maps_exit_long_with_position_qty_fallback() -> None:
+    decision = StrategyDecision(decision_type=StrategyDecisionType.EXIT_LONG, size=Decimal("0"))
+
+    intent = live_runner.decision_to_intent(
+        "rp_daily_breakout",
+        "BTCUSDT",
+        decision,
+        position_qty=Decimal("1.5"),
+    )
+
+    assert intent is not None
+    assert intent.strategy_id == "rp_daily_breakout"
+    assert intent.symbol == "BTCUSDT"
+    assert intent.side is Side.SELL
+    assert intent.quantity == Decimal("1.5")
+    assert intent.order_type == "MARKET"
 
 
 def test_decision_to_intent_returns_none_for_unsupported_decision_type() -> None:
