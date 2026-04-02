@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from decimal import Decimal
 
 import polars as pl
@@ -31,6 +32,33 @@ def test_prepare_features_attaches_rp_proxy_and_confirmation_columns() -> None:
     assert prepared["rp"].to_list()[:4] == [10.0, 10.0, 10.5, 11.0]
     assert prepared["above_rp_confirmed"].to_list()[:4] == [False, False, True, True]
     assert prepared["below_rp_confirmed"].to_list()[:4] == [False, False, False, False]
+
+
+def test_config_from_args_returns_rp_config_only() -> None:
+    parser = argparse.ArgumentParser()
+    RPDailyBreakoutStrategy.register_cli_args(parser)
+    args = parser.parse_args(
+        [
+            "--rp-window",
+            "5",
+            "--entry-confirmations",
+            "3",
+            "--exit-confirmations",
+            "2",
+            "--quantity",
+            "0.2",
+        ]
+    )
+
+    config = RPDailyBreakoutStrategy.config_from_args(args)
+
+    assert isinstance(config, RPDailyBreakoutConfig)
+    assert config == RPDailyBreakoutConfig(
+        rp_window=5,
+        entry_confirmations=3,
+        exit_confirmations=2,
+        quantity=Decimal("0.2"),
+    )
 
 
 def test_emits_entry_after_configured_confirmed_closes_above_rp() -> None:
