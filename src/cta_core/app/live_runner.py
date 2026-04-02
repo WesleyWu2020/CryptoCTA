@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
+
+import polars as pl
 
 from cta_core.events import OrderIntent, Side
 from cta_core.execution.live_binance import LiveBinanceAdapter
 from cta_core.app.live_config import LiveRunConfig
 from cta_core.risk import RiskContext, RiskEngine, RiskResult
-from cta_core.strategy_runtime import StrategyDecision, StrategyDecisionType
+from cta_core.strategy_runtime import BaseStrategy, StrategyContext, StrategyDecision, StrategyDecisionType
 
 
 def bootstrap_live_runner(api_key: str, api_secret: str) -> LiveBinanceAdapter:
@@ -48,6 +51,72 @@ def check_risk(engine: RiskEngine, ctx: RiskContext) -> RiskResult:
     return engine.check(ctx)
 
 
+def run_once(
+    *,
+    strategy: BaseStrategy,
+    adapter: Any,
+    bars: pl.DataFrame,
+    symbol: str,
+    dry_run: bool = False,
+    position_qty: Decimal | None = None,
+) -> dict[str, Any]:
+    if "open_time" not in bars.columns:
+        raise ValueError("bars must contain open_time")
+    if "close" not in bars.columns:
+        raise ValueError("bars must contain close")
+
+    sorted_bars = bars.sort("open_time")
+    prepared_bars = strategy.prepare_features(sorted_bars)
+    replay_bars = prepared_bars if isinstance(prepared_bars, pl.DataFrame) else sorted_bars
+
+    latest_bar = replay_bars.tail(1)
+    latest_context = StrategyContext(symbol=symbol, bars=latest_bar)
+    decisions = strategy.on_bar(latest_context)
+
+    submitted_intents: list[dict[str, Any]] = []
+    latest_open_time = int(latest_bar.get_column("open_time").item()) if latest_bar.height > 0 else None
+
+    for decision in decisions:
+        resolved_position_qty = position_qty
+        if decision.decision_type == StrategyDecisionType.EXIT_LONG and resolved_position_qty is None:
+            strategy_config = getattr(strategy, "config", None)
+            configured_quantity = getattr(strategy_config, "quantity", None)
+            if configured_quantity is not None:
+                resolved_position_qty = configured_quantity if isinstance(configured_quantity, Decimal) else Decimal(str(configured_quantity))
+
+        intent = decision_to_intent(strategy.strategy_id, symbol, decision, position_qty=resolved_position_qty)
+        if intent is None:
+            continue
+        if dry_run:
+            continue
+        response = adapter.submit_order(intent=intent, ts_ms=latest_open_time)
+        submitted_intents.append(
+            {
+                "intent": intent,
+                "response": response,
+                "decision_type": decision.decision_type.value,
+            }
+        )
+
+    return {
+        "strategy_id": strategy.strategy_id,
+        "symbol": symbol,
+        "dry_run": dry_run,
+        "latest_open_time": latest_open_time,
+        "decisions_count": len(decisions),
+        "submit_count": len(submitted_intents),
+        "decisions": [
+            {
+                "decision_type": decision.decision_type.value,
+                "size": decision.size,
+                "reason": decision.reason,
+            }
+            for decision in decisions
+        ],
+        "submitted_intents": submitted_intents,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     config = LiveRunConfig.from_argv(argv)
     if config.dry_run:
@@ -57,4 +126,4 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["bootstrap_live_runner", "check_risk", "decision_to_intent", "main"]
+__all__ = ["bootstrap_live_runner", "check_risk", "decision_to_intent", "main", "run_once"]

@@ -1,12 +1,24 @@
 from decimal import Decimal
 
 import pytest
+import polars as pl
 
 from cta_core.app import live_runner
 from cta_core.app.live_config import LiveRunConfig
 from cta_core.events import Side
 from cta_core.risk import RiskContext, RiskEngine
 from cta_core.strategy_runtime import StrategyDecision, StrategyDecisionType
+from cta_core.strategy_runtime.strategies import RPDailyBreakoutConfig, RPDailyBreakoutStrategy
+
+
+class DummyAdapter:
+    def __init__(self) -> None:
+        self.submitted: list[dict[str, object]] = []
+
+    def submit_order(self, *, intent, ts_ms: int) -> dict[str, object]:
+        record = {"intent": intent, "ts_ms": ts_ms}
+        self.submitted.append(record)
+        return record
 
 
 def test_decision_to_intent_maps_enter_long() -> None:
@@ -66,6 +78,34 @@ def test_decision_to_intent_returns_none_for_unsupported_decision_type() -> None
     intent = live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
 
     assert intent is None
+
+
+def test_run_once_dry_run_does_not_submit() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [3_000, 1_000, 2_000],
+            "close": [13.0, 10.0, 12.0],
+        }
+    )
+    strategy = RPDailyBreakoutStrategy(
+        RPDailyBreakoutConfig(rp_window=2, entry_confirmations=2, exit_confirmations=2, quantity=Decimal("1"))
+    )
+    adapter = DummyAdapter()
+
+    result = live_runner.run_once(
+        strategy=strategy,
+        adapter=adapter,
+        bars=bars,
+        symbol="BTCUSDT",
+        dry_run=True,
+    )
+
+    assert adapter.submitted == []
+    assert result["decisions_count"] == 1
+    assert result["submit_count"] == 0
+    assert result["submitted_intents"] == []
+    assert result["latest_open_time"] == 3_000
+    assert result["dry_run"] is True
 
 
 def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:
