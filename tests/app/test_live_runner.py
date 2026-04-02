@@ -21,6 +21,56 @@ class DummyAdapter:
         return record
 
 
+class HistoryAwareStrategy:
+    strategy_id = "history_aware"
+
+    def __init__(self) -> None:
+        self.observed_heights: list[int] = []
+
+    def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+        return bars
+
+    def on_start(self, context) -> None:
+        return None
+
+    def on_bar(self, context) -> list[StrategyDecision]:
+        self.observed_heights.append(context.bars.height)
+        if context.bars.height >= 2:
+            return [
+                StrategyDecision(
+                    decision_type=StrategyDecisionType.ENTER_LONG,
+                    size=Decimal("1"),
+                    reason="history_seen",
+                )
+            ]
+        return []
+
+    def on_finish(self, context) -> None:
+        return None
+
+
+class EnterLongStrategy:
+    strategy_id = "enter_long"
+
+    def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+        return bars
+
+    def on_start(self, context) -> None:
+        return None
+
+    def on_bar(self, context) -> list[StrategyDecision]:
+        return [
+            StrategyDecision(
+                decision_type=StrategyDecisionType.ENTER_LONG,
+                size=Decimal("1"),
+                reason="enter",
+            )
+        ]
+
+    def on_finish(self, context) -> None:
+        return None
+
+
 def test_decision_to_intent_maps_enter_long() -> None:
     decision = StrategyDecision(decision_type=StrategyDecisionType.ENTER_LONG, size=Decimal("0.5"))
 
@@ -106,6 +156,54 @@ def test_run_once_dry_run_does_not_submit() -> None:
     assert result["submitted_intents"] == []
     assert result["latest_open_time"] == 3_000
     assert result["dry_run"] is True
+
+
+def test_run_once_uses_full_history_context() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [2_000, 1_000],
+            "close": [12.0, 10.0],
+        }
+    )
+    strategy = HistoryAwareStrategy()
+    adapter = DummyAdapter()
+
+    result = live_runner.run_once(
+        strategy=strategy,
+        adapter=adapter,
+        bars=bars,
+        symbol="BTCUSDT",
+        dry_run=True,
+    )
+
+    assert strategy.observed_heights == [2]
+    assert result["decisions_count"] == 1
+    assert result["submit_count"] == 0
+    assert adapter.submitted == []
+
+
+def test_run_once_non_dry_submit_uses_latest_open_time() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [2_000, 3_000, 1_000],
+            "close": [12.0, 13.0, 10.0],
+        }
+    )
+    strategy = EnterLongStrategy()
+    adapter = DummyAdapter()
+
+    result = live_runner.run_once(
+        strategy=strategy,
+        adapter=adapter,
+        bars=bars,
+        symbol="BTCUSDT",
+        dry_run=False,
+    )
+
+    assert result["decisions_count"] == 1
+    assert result["submit_count"] == 1
+    assert len(adapter.submitted) == 1
+    assert adapter.submitted[0]["ts_ms"] == 3_000
 
 
 def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:

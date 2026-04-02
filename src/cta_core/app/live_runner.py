@@ -70,21 +70,14 @@ def run_once(
     replay_bars = prepared_bars if isinstance(prepared_bars, pl.DataFrame) else sorted_bars
 
     latest_bar = replay_bars.tail(1)
-    latest_context = StrategyContext(symbol=symbol, bars=latest_bar)
+    latest_context = StrategyContext(symbol=symbol, bars=replay_bars)
     decisions = strategy.on_bar(latest_context)
 
     submitted_intents: list[dict[str, Any]] = []
     latest_open_time = int(latest_bar.get_column("open_time").item()) if latest_bar.height > 0 else None
 
     for decision in decisions:
-        resolved_position_qty = position_qty
-        if decision.decision_type == StrategyDecisionType.EXIT_LONG and resolved_position_qty is None:
-            strategy_config = getattr(strategy, "config", None)
-            configured_quantity = getattr(strategy_config, "quantity", None)
-            if configured_quantity is not None:
-                resolved_position_qty = configured_quantity if isinstance(configured_quantity, Decimal) else Decimal(str(configured_quantity))
-
-        intent = decision_to_intent(strategy.strategy_id, symbol, decision, position_qty=resolved_position_qty)
+        intent = decision_to_intent(strategy.strategy_id, symbol, decision, position_qty=position_qty)
         if intent is None:
             continue
         if dry_run:
