@@ -25,6 +25,18 @@ def test_normalize_and_append(tmp_path: Path):
     ]
     df = normalize_klines(symbol="BTCUSDT", interval="15m", rows=raw)
     assert df.select("symbol").item() == "BTCUSDT"
+    for column in (
+        "base_asset",
+        "date",
+        "datetime",
+        "quote_volume",
+        "trades_count",
+        "taker_buy_base",
+        "taker_buy_quote",
+        "open_time",
+        "close_time",
+    ):
+        assert column in df.columns
     path = tmp_path / "bars.parquet"
     append_closed_bars(df, path)
     loaded = pl.read_parquet(path)

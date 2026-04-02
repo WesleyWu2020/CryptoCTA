@@ -1,0 +1,166 @@
+{
+  "rows": [
+    {
+      "case": "opt1_w96_q80",
+      "return_pct": -0.4535007635057804,
+      "max_drawdown": 0.4535007635057804,
+      "closed_trades": 315,
+      "win_rate": 0.1111111111111111,
+      "profit_factor": 0.08603599977281656
+    },
+    {
+      "case": "opt1_w96_q90",
+      "return_pct": -0.26394761169223463,
+      "max_drawdown": 0.26394761169223463,
+      "closed_trades": 176,
+      "win_rate": 0.11931818181818182,
+      "profit_factor": 0.10044940108046375
+    },
+    {
+      "case": "opt1_w96_q95",
+      "return_pct": -0.15361340192600081,
+      "max_drawdown": 0.15386703208885774,
+      "closed_trades": 99,
+      "win_rate": 0.1111111111111111,
+      "profit_factor": 0.10340949650955081
+    },
+    {
+      "case": "opt1_w192_q90",
+      "return_pct": -0.27018746334626614,
+      "max_drawdown": 0.27052255720887025,
+      "closed_trades": 181,
+      "win_rate": 0.11602209944751381,
+      "profit_factor": 0.11924654324216882
+    },
+    {
+      "case": "opt3_b4_f20_s50",
+      "return_pct": -0.061234097569996086,
+      "max_drawdown": 0.061234097569996086,
+      "closed_trades": 31,
+      "win_rate": 0.06451612903225806,
+      "profit_factor": 0.05502301053542887
+    },
+    {
+      "case": "opt3_b4_f50_s200",
+      "return_pct": -0.06049581270871771,
+      "max_drawdown": 0.06049581270871771,
+      "closed_trades": 37,
+      "win_rate": 0.08108108108108109,
+      "profit_factor": 0.06293454554549428
+    },
+    {
+      "case": "opt3_b8_f20_s50",
+      "return_pct": -0.05831323923642252,
+      "max_drawdown": 0.05831323923642252,
+      "closed_trades": 34,
+      "win_rate": 0.058823529411764705,
+      "profit_factor": 0.057681713857422864
+    },
+    {
+      "case": "opt4_tr08_tp05",
+      "return_pct": -0.09168737447379463,
+      "max_drawdown": 0.09168737447379463,
+      "closed_trades": 88,
+      "win_rate": 0.22727272727272727,
+      "profit_factor": 0.13296766194076526
+    },
+    {
+      "case": "opt4_tr12_tp08",
+      "return_pct": -0.08499480288672843,
+      "max_drawdown": 0.08926687205681803,
+      "closed_trades": 79,
+      "win_rate": 0.3037974683544304,
+      "profit_factor": 0.18237428327751845
+    },
+    {
+      "case": "opt4_tr16_tp10",
+      "return_pct": -0.09019098845642017,
+      "max_drawdown": 0.09508795146397335,
+      "closed_trades": 72,
+      "win_rate": 0.2777777777777778,
+      "profit_factor": 0.1516141562584601
+    }
+  ],
+  "sorted_by_return": [
+    {
+      "case": "opt3_b8_f20_s50",
+      "return_pct": -0.05831323923642252,
+      "max_drawdown": 0.05831323923642252,
+      "closed_trades": 34,
+      "win_rate": 0.058823529411764705,
+      "profit_factor": 0.057681713857422864
+    },
+    {
+      "case": "opt3_b4_f50_s200",
+      "return_pct": -0.06049581270871771,
+      "max_drawdown": 0.06049581270871771,
+      "closed_trades": 37,
+      "win_rate": 0.08108108108108109,
+      "profit_factor": 0.06293454554549428
+    },
+    {
+      "case": "opt3_b4_f20_s50",
+      "return_pct": -0.061234097569996086,
+      "max_drawdown": 0.061234097569996086,
+      "closed_trades": 31,
+      "win_rate": 0.06451612903225806,
+      "profit_factor": 0.05502301053542887
+    },
+    {
+      "case": "opt4_tr12_tp08",
+      "return_pct": -0.08499480288672843,
+      "max_drawdown": 0.08926687205681803,
+      "closed_trades": 79,
+      "win_rate": 0.3037974683544304,
+      "profit_factor": 0.18237428327751845
+    },
+    {
+      "case": "opt4_tr16_tp10",
+      "return_pct": -0.09019098845642017,
+      "max_drawdown": 0.09508795146397335,
+      "closed_trades": 72,
+      "win_rate": 0.2777777777777778,
+      "profit_factor": 0.1516141562584601
+    },
+    {
+      "case": "opt4_tr08_tp05",
+      "return_pct": -0.09168737447379463,
+      "max_drawdown": 0.09168737447379463,
+      "closed_trades": 88,
+      "win_rate": 0.22727272727272727,
+      "profit_factor": 0.13296766194076526
+    },
+    {
+      "case": "opt1_w96_q95",
+      "return_pct": -0.15361340192600081,
+      "max_drawdown": 0.15386703208885774,
+      "closed_trades": 99,
+      "win_rate": 0.1111111111111111,
+      "profit_factor": 0.10340949650955081
+    },
+    {
+      "case": "opt1_w96_q90",
+      "return_pct": -0.26394761169223463,
+      "max_drawdown": 0.26394761169223463,
+      "closed_trades": 176,
+      "win_rate": 0.11931818181818182,
+      "profit_factor": 0.10044940108046375
+    },
+    {
+      "case": "opt1_w192_q90",
+      "return_pct": -0.27018746334626614,
+      "max_drawdown": 0.27052255720887025,
+      "closed_trades": 181,
+      "win_rate": 0.11602209944751381,
+      "profit_factor": 0.11924654324216882
+    },
+    {
+      "case": "opt1_w96_q80",
+      "return_pct": -0.4535007635057804,
+      "max_drawdown": 0.4535007635057804,
+      "closed_trades": 315,
+      "win_rate": 0.1111111111111111,
+      "profit_factor": 0.08603599977281656
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: cryptocta
+Version: 0.1.0
+Requires-Python: >=3.12
+Requires-Dist: pydantic>=2.8
+Requires-Dist: duckdb>=1.0.0
+Requires-Dist: polars>=1.10.0
+Requires-Dist: pyarrow>=17.0.0
+Requires-Dist: httpx>=0.27.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.24.0; extra == "dev"
+Requires-Dist: maturin>=1.7.0; extra == "dev"
+Requires-Dist: ruff>=0.6.0; extra == "dev"

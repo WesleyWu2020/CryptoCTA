@@ -46,6 +46,7 @@ def test_fetch_klines_range_merges_pages_and_dedupes():
 
     assert bars.select("open_time").to_series().to_list() == [1000, 2000, 3000]
     assert bars.filter(pl.col("open_time") == 2000).select("close").item() == 2.5
+    assert "taker_buy_base_volume" in bars.columns
 
 
 def test_upsert_klines_to_duckdb_updates_existing_rows(tmp_path: Path):
@@ -61,6 +62,7 @@ def test_upsert_klines_to_duckdb_updates_existing_rows(tmp_path: Path):
             "low": [0.5],
             "close": [1.5],
             "volume": [10.0],
+            "taker_buy_base_volume": [6.0],
             "close_time": [1999],
         }
     )
@@ -74,6 +76,7 @@ def test_upsert_klines_to_duckdb_updates_existing_rows(tmp_path: Path):
             "low": [0.5],
             "close": [1.8],
             "volume": [11.0],
+            "taker_buy_base_volume": [7.0],
             "close_time": [1999],
         }
     )
@@ -83,9 +86,12 @@ def test_upsert_klines_to_duckdb_updates_existing_rows(tmp_path: Path):
 
     conn = duckdb.connect(str(db_path))
     rows = conn.execute(
-        "SELECT symbol, interval, open_time, close, volume FROM futures_klines"
+        """
+        SELECT symbol, base_asset, interval, open_time, close, volume, taker_buy_base, taker_buy_quote, taker_buy_base_volume
+        FROM futures_klines
+        """
     ).fetchall()
     conn.close()
 
     assert len(rows) == 1
-    assert rows[0] == ("BTCUSDT", "15m", 1000, 1.8, 11.0)
+    assert rows[0] == ("BTCUSDT", "BTC", "15m", 1000, 1.8, 11.0, 7.0, None, 7.0)

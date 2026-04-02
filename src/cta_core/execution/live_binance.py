@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hmac
+import time
+from decimal import Decimal
 from hashlib import sha256
 from urllib.parse import urlencode
 
 import httpx
 
-from cta_core.events import OrderIntent
+from cta_core.events.models import OrderIntent
 
 
 class LiveBinanceAdapter:
@@ -20,34 +22,43 @@ class LiveBinanceAdapter:
         payload = f"{strategy_id}|{symbol}|{ts_ms}".encode()
         return sha256(payload).hexdigest()[:32]
 
-    def submit_order(self, *, intent: OrderIntent, ts_ms: int) -> dict:
-        if intent.order_type.upper() != "MARKET":
-            raise ValueError("LiveBinanceAdapter.submit_order only supports MARKET orders")
-
-        payload = {
-            "symbol": intent.symbol,
-            "side": intent.side.value,
-            "type": intent.order_type.upper(),
-            "quantity": str(intent.quantity),
-            "newClientOrderId": self.client_order_id(
-                strategy_id=intent.strategy_id,
-                symbol=intent.symbol,
-                ts_ms=ts_ms,
-            ),
-            "timestamp": ts_ms,
-            "recvWindow": 5000,
-        }
-        query = urlencode(payload)
-        payload["signature"] = hmac.new(
+    def _sign_query_params(self, params: dict[str, object]) -> str:
+        query_string = urlencode(params)
+        return hmac.new(
             self.api_secret.encode(),
-            query.encode(),
+            query_string.encode(),
             sha256,
         ).hexdigest()
 
+    @staticmethod
+    def _format_quantity(quantity: Decimal) -> str:
+        formatted = format(quantity, "f").rstrip("0").rstrip(".")
+        return formatted if formatted else "0"
+
+    def submit_order(self, intent: OrderIntent, ts_ms: int | None = None) -> dict[str, object]:
+        if intent.order_type != "MARKET":
+            raise ValueError(f"Unsupported order_type {intent.order_type!r}; MARKET-only is supported for now")
+
+        timestamp = ts_ms if ts_ms is not None else time.time_ns() // 1_000_000
+        new_client_order_id = self.client_order_id(
+            strategy_id=intent.strategy_id,
+            symbol=intent.symbol,
+            ts_ms=timestamp,
+        )
+        params: dict[str, object] = {
+            "symbol": intent.symbol,
+            "side": intent.side.value,
+            "type": intent.order_type,
+            "quantity": self._format_quantity(intent.quantity),
+            "newClientOrderId": new_client_order_id,
+            "timestamp": timestamp,
+        }
+        params["signature"] = self._sign_query_params(params)
+
         response = httpx.post(
             f"{self.BASE_URL}/fapi/v1/order",
+            params=params,
             headers={"X-MBX-APIKEY": self.api_key},
-            data=payload,
             timeout=10.0,
         )
         response.raise_for_status()

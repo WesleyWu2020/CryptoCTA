@@ -1,0 +1,186 @@
+{
+  "rows": [
+    {
+      "min_pressure_bars": 1,
+      "cooldown_bars": 0,
+      "return_pct": -0.05563279928099175,
+      "max_drawdown": 0.05563279928099175,
+      "closed_trades": 38,
+      "win_rate": 0.21052631578947367,
+      "profit_factor": 0.08706964407910436,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp1_cd0.json"
+    },
+    {
+      "min_pressure_bars": 1,
+      "cooldown_bars": 2,
+      "return_pct": -0.05563279928099175,
+      "max_drawdown": 0.05563279928099175,
+      "closed_trades": 38,
+      "win_rate": 0.21052631578947367,
+      "profit_factor": 0.08706964407910436,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp1_cd2.json"
+    },
+    {
+      "min_pressure_bars": 1,
+      "cooldown_bars": 4,
+      "return_pct": -0.05563279928099175,
+      "max_drawdown": 0.05563279928099175,
+      "closed_trades": 38,
+      "win_rate": 0.21052631578947367,
+      "profit_factor": 0.08706964407910436,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp1_cd4.json"
+    },
+    {
+      "min_pressure_bars": 2,
+      "cooldown_bars": 0,
+      "return_pct": -0.000604437565447879,
+      "max_drawdown": 0.000604437565447879,
+      "closed_trades": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp2_cd0.json"
+    },
+    {
+      "min_pressure_bars": 2,
+      "cooldown_bars": 2,
+      "return_pct": -0.000604437565447879,
+      "max_drawdown": 0.000604437565447879,
+      "closed_trades": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp2_cd2.json"
+    },
+    {
+      "min_pressure_bars": 2,
+      "cooldown_bars": 4,
+      "return_pct": -0.000604437565447879,
+      "max_drawdown": 0.000604437565447879,
+      "closed_trades": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp2_cd4.json"
+    },
+    {
+      "min_pressure_bars": 3,
+      "cooldown_bars": 0,
+      "return_pct": -0.0021369133015845727,
+      "max_drawdown": 0.0021369133015845727,
+      "closed_trades": 1,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp3_cd0.json"
+    },
+    {
+      "min_pressure_bars": 3,
+      "cooldown_bars": 2,
+      "return_pct": -0.0021369133015845727,
+      "max_drawdown": 0.0021369133015845727,
+      "closed_trades": 1,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp3_cd2.json"
+    },
+    {
+      "min_pressure_bars": 3,
+      "cooldown_bars": 4,
+      "return_pct": -0.0021369133015845727,
+      "max_drawdown": 0.0021369133015845727,
+      "closed_trades": 1,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp3_cd4.json"
+    }
+  ],
+  "sorted_by_return": [
+    {
+      "min_pressure_bars": 2,
+      "cooldown_bars": 0,
+      "return_pct": -0.000604437565447879,
+      "max_drawdown": 0.000604437565447879,
+      "closed_trades": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp2_cd0.json"
+    },
+    {
+      "min_pressure_bars": 2,
+      "cooldown_bars": 2,
+      "return_pct": -0.000604437565447879,
+      "max_drawdown": 0.000604437565447879,
+      "closed_trades": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp2_cd2.json"
+    },
+    {
+      "min_pressure_bars": 2,
+      "cooldown_bars": 4,
+      "return_pct": -0.000604437565447879,
+      "max_drawdown": 0.000604437565447879,
+      "closed_trades": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp2_cd4.json"
+    },
+    {
+      "min_pressure_bars": 3,
+      "cooldown_bars": 0,
+      "return_pct": -0.0021369133015845727,
+      "max_drawdown": 0.0021369133015845727,
+      "closed_trades": 1,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp3_cd0.json"
+    },
+    {
+      "min_pressure_bars": 3,
+      "cooldown_bars": 2,
+      "return_pct": -0.0021369133015845727,
+      "max_drawdown": 0.0021369133015845727,
+      "closed_trades": 1,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp3_cd2.json"
+    },
+    {
+      "min_pressure_bars": 3,
+      "cooldown_bars": 4,
+      "return_pct": -0.0021369133015845727,
+      "max_drawdown": 0.0021369133015845727,
+      "closed_trades": 1,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp3_cd4.json"
+    },
+    {
+      "min_pressure_bars": 1,
+      "cooldown_bars": 0,
+      "return_pct": -0.05563279928099175,
+      "max_drawdown": 0.05563279928099175,
+      "closed_trades": 38,
+      "win_rate": 0.21052631578947367,
+      "profit_factor": 0.08706964407910436,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp1_cd0.json"
+    },
+    {
+      "min_pressure_bars": 1,
+      "cooldown_bars": 2,
+      "return_pct": -0.05563279928099175,
+      "max_drawdown": 0.05563279928099175,
+      "closed_trades": 38,
+      "win_rate": 0.21052631578947367,
+      "profit_factor": 0.08706964407910436,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp1_cd2.json"
+    },
+    {
+      "min_pressure_bars": 1,
+      "cooldown_bars": 4,
+      "return_pct": -0.05563279928099175,
+      "max_drawdown": 0.05563279928099175,
+      "closed_trades": 38,
+      "win_rate": 0.21052631578947367,
+      "profit_factor": 0.08706964407910436,
+      "file": "artifacts/backtests/ofi_opt34_20260331/btcusdt_15m_ofi_34_mp1_cd4.json"
+    }
+  ]
+}

@@ -5,7 +5,14 @@ import sys
 from cta_core.strategy_runtime.registry import build_strategy, get_strategy_class, list_strategy_ids
 
 from .constants import SUPPORTED_EXECUTION_STRATEGIES, UNSUPPORTED_HTF_EXECUTION_OPTIONS
-from .execution import execute_rp_daily_breakout
+from .execution import (
+    execute_liquidation_vacuum_reversion,
+    execute_liquidity_shock_reversion,
+    execute_rp_daily_breakout,
+    execute_rsi_threshold,
+    execute_smart_money_size_breakout,
+    execute_taker_imbalance_absorption,
+)
 from .parser import parse_args
 
 
@@ -55,8 +62,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.strategy not in SUPPORTED_EXECUTION_STRATEGIES:
+        supported = ", ".join(sorted(SUPPORTED_EXECUTION_STRATEGIES))
         print(
-            f"strategy execution is not yet supported for '{args.strategy}'; supported: rp_daily_breakout",
+            f"strategy execution is not yet supported for '{args.strategy}'; supported: {supported}",
             file=sys.stderr,
         )
         return 2
@@ -70,7 +78,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    return execute_rp_daily_breakout(args)
+    if args.strategy == "rp_daily_breakout":
+        return execute_rp_daily_breakout(args)
+    if args.strategy == "rsi_threshold":
+        return execute_rsi_threshold(args)
+    if args.strategy == "liquidity_shock_reversion":
+        return execute_liquidity_shock_reversion(args)
+    if args.strategy == "taker_imbalance_absorption":
+        return execute_taker_imbalance_absorption(args)
+    if args.strategy == "liquidation_vacuum_reversion":
+        return execute_liquidation_vacuum_reversion(args)
+    if args.strategy == "smart_money_size_breakout":
+        return execute_smart_money_size_breakout(args)
+    print(f"strategy execution routing missing for '{args.strategy}'", file=sys.stderr)
+    return 2
 
 
 __all__ = ["main"]

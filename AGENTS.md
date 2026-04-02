@@ -80,6 +80,25 @@ Recommended focused test scopes before full suite:
 - `LiveBinanceAdapter.client_order_id(...)` is intentionally deterministic for idempotency.
 - Strategy registration must stay explicit via `cta_core.strategy_runtime.registry` (no implicit dynamic loading).
 
+## 4.1) CTA Strategy Flow and No-Lookahead Rules
+
+- Every strategy/backtest path must explicitly define timing semantics (`signal_bar` vs `fill_bar`) in code comments or tests.
+- `signal_bar = t` means indicators/signals only use data up to bar `t` close.
+- `fill_bar = t+1` for `src/cta_core/app/strategy_backtest/execution.py` path (entry/exit filled from next bar open with fee/slippage model).
+- `src/cta_core/strategy_runtime/engine.py` currently fills on current bar close; if used, document this assumption in tests and output notes.
+- Always sort bars by `open_time` ascending before feature generation and backtest loop.
+- Indicator warmup must not use future values (`bfill` or equivalent future-derived backfilling is forbidden for signal columns).
+- Future-leak patterns are forbidden in signal logic: `shift(-1)`, `pct_change(-1)`, `rolling(..., center=True)`, `iloc[i+1]`, or any direct read of next bar OHLC for current decision.
+- Multi-timeframe merge must only use closed HTF bars (`htf_close_time <= signal_time`); never use unfinished HTF bars.
+- Stop-loss / take-profit simulation must keep trigger-vs-fill timing explicit and consistent with the execution model; do not implicitly fill at signal-bar extreme prices unless the engine explicitly models intrabar fill priority.
+- Any change touching signal timing, exits, or MTF alignment must add/update tests.
+- At least one anti-lookahead test is required: perturb future bars and assert historical decisions/trades before the perturbation point remain unchanged.
+- Code review quick check (recommended):
+
+```bash
+rg -n "shift\(-1\)|pct_change\(-1\)|center\s*=\s*True|iloc\[.*\+1\]|bfill\(" src tests
+```
+
 ## 5) File/Artifact Hygiene
 
 Do not commit generated artifacts such as:
