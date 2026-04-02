@@ -23,12 +23,13 @@ def decision_to_intent(strategy_id: str, symbol: str, decision: StrategyDecision
             order_type="MARKET",
         )
     if decision.decision_type == StrategyDecisionType.EXIT_LONG:
-        quantity = decision.size if decision.size > Decimal("0") else Decimal("0")
+        if decision.size <= Decimal("0"):
+            return None
         return OrderIntent(
             strategy_id=strategy_id,
             symbol=symbol,
             side=Side.SELL,
-            quantity=quantity,
+            quantity=decision.size,
             order_type="MARKET",
         )
     return None

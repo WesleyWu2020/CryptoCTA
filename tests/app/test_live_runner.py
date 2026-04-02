@@ -20,6 +20,22 @@ def test_decision_to_intent_maps_enter_long() -> None:
     assert intent.order_type == "MARKET"
 
 
+def test_decision_to_intent_returns_none_for_exit_long_with_zero_size() -> None:
+    decision = StrategyDecision(decision_type=StrategyDecisionType.EXIT_LONG, size=Decimal("0"))
+
+    intent = live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
+
+    assert intent is None
+
+
+def test_decision_to_intent_returns_none_for_unsupported_decision_type() -> None:
+    decision = StrategyDecision(decision_type=StrategyDecisionType.HOLD)
+
+    intent = live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
+
+    assert intent is None
+
+
 def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:
     engine = RiskEngine(max_daily_loss=Decimal("100"))
     ctx = RiskContext(
