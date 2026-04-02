@@ -35,6 +35,22 @@ def _map_preset_use_flag(
     return mapped
 
 
+def _map_preset_compat_key(
+    *,
+    key: str,
+    value: object,
+    parser_dests: set[str],
+) -> dict[str, object]:
+    compat_keys = {
+        "rp_entry_confirm_bars": "entry_confirmations",
+        "rp_exit_confirm_bars": "exit_confirmations",
+    }
+    mapped_key = compat_keys.get(key)
+    if mapped_key is None or mapped_key not in parser_dests:
+        return {}
+    return {mapped_key: value}
+
+
 def _apply_preset_defaults(parser: argparse.ArgumentParser, preset_id: str) -> None:
     from cta_core.app.strategy_presets import get_backtest_strategy
 
@@ -45,6 +61,11 @@ def _apply_preset_defaults(parser: argparse.ArgumentParser, preset_id: str) -> N
     for key, value in preset.defaults.items():
         if key in parser_dests:
             preset_defaults[key] = value
+            continue
+        mapped = _map_preset_compat_key(key=key, value=value, parser_dests=parser_dests)
+        for mapped_key, mapped_value in mapped.items():
+            preset_defaults.setdefault(mapped_key, mapped_value)
+        if mapped:
             continue
         mapped = _map_preset_use_flag(key=key, value=value, parser_dests=parser_dests)
         for mapped_key, mapped_value in mapped.items():
@@ -60,6 +81,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--list-strategies", action="store_true", help="print registered strategy ids")
     group.add_argument("--strategy", choices=list_strategy_ids(), help="build or execute a registered strategy")
+    parser.add_argument("--preset", default=None)
 
     RunConfig.register_cli_args(parser)
 

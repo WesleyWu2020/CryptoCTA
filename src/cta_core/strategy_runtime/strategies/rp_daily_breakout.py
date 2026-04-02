@@ -130,9 +130,16 @@ class RPDailyBreakoutStrategy(BaseStrategy):
     @classmethod
     def register_cli_args(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--rp-window", type=int, default=3)
-        parser.add_argument("--entry-confirmations", type=int, default=2)
-        parser.add_argument("--exit-confirmations", type=int, default=2)
+        parser.add_argument("--entry-confirmations", "--rp-entry-confirm-bars", dest="entry_confirmations", type=int, default=2)
+        parser.add_argument("--exit-confirmations", "--rp-exit-confirm-bars", dest="exit_confirmations", type=int, default=2)
         parser.add_argument("--quantity", type=Decimal, default=Decimal("1"))
+        parser.add_argument("--cooldown-bars", type=int, default=4)
+        parser.add_argument("--disable-htf-filter", action="store_true")
+        parser.add_argument("--htf-interval", default="1d")
+        parser.add_argument("--htf-entry-lookback", type=int, default=20)
+        parser.add_argument("--htf-expansion-bars", type=int, default=3)
+        parser.add_argument("--htf-expansion-min-growth", type=float, default=1.05)
+        parser.add_argument("--disable-htf-expansion-filter", action="store_true")
 
     @classmethod
     def config_from_args(cls, args: argparse.Namespace) -> RPDailyBreakoutConfig:

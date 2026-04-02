@@ -5,6 +5,7 @@ import argparse
 from cta_core.app.turtle_backtest import run_turtle_backtest, write_backtest_output
 from cta_core.config.run_config import RunConfig
 from cta_core.data.market_data_store import utc_ms
+from cta_core.app.turtle_backtest import TurtleConfig
 from cta_core.strategy_runtime.strategies.rp_daily_breakout import RPDailyBreakoutStrategy
 
 from .data_source import load_or_fetch
@@ -25,12 +26,27 @@ def execute_rp_daily_breakout(args: argparse.Namespace) -> int:
     )
 
     strategy_config = RPDailyBreakoutStrategy.config_from_args(args)
+    turtle_config = TurtleConfig.from_flat_kwargs(
+        initial_capital=run_cfg.initial_capital,
+        fee_bps=run_cfg.fee_bps,
+        slippage_bps=run_cfg.slippage_bps,
+        max_leverage=run_cfg.max_leverage,
+        cooldown_bars=getattr(args, "cooldown_bars", 4),
+        rp_entry_confirm_bars=strategy_config.entry_confirmations,
+        rp_exit_confirm_bars=strategy_config.exit_confirmations,
+        allow_short=False,
+        use_htf_filter=False,
+        use_rp_chop_filter=False,
+        use_rp_signal_quality_sizing=False,
+        use_regime_filter=False,
+        use_vol_target_sizing=False,
+    )
     result = run_turtle_backtest(
         bars=bars,
         bars_htf=None,
         symbol=run_cfg.symbol,
         interval=run_cfg.interval,
-        config=strategy_config,
+        config=turtle_config,
     )
 
     result["data_source"] = data_source
