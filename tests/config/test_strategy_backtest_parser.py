@@ -13,8 +13,6 @@ def test_parse_args_applies_rp_preset_defaults(monkeypatch) -> None:
         description="test",
         defaults={
             "allow_short": True,
-            "regime_ema_window": 21,
-            "regime_min_slope": 0.01,
             "max_hold_bars": 12,
             "use_rp_chop_filter": True,
             "use_rp_signal_quality_sizing": True,
@@ -35,8 +33,6 @@ def test_parse_args_applies_rp_preset_defaults(monkeypatch) -> None:
 
     assert isinstance(config, RPDailyBreakoutConfig)
     assert args.allow_short is True
-    assert args.regime_ema_window == 21
-    assert args.regime_min_slope == 0.01
     assert args.max_hold_bars == 12
     assert args.use_rp_chop_filter is True
     assert args.use_rp_signal_quality_sizing is True

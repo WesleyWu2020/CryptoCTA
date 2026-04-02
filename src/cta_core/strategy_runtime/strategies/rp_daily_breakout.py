@@ -134,8 +134,6 @@ class RPDailyBreakoutStrategy(BaseStrategy):
         parser.add_argument("--exit-confirmations", "--rp-exit-confirm-bars", dest="exit_confirmations", type=int, default=2)
         parser.add_argument("--quantity", type=Decimal, default=Decimal("1"))
         parser.add_argument("--allow-short", action="store_true")
-        parser.add_argument("--regime-ema-window", type=int, default=30)
-        parser.add_argument("--regime-min-slope", type=float, default=0.002)
         parser.add_argument("--max-hold-bars", type=int, default=40)
         parser.add_argument("--use-rp-chop-filter", action="store_true")
         parser.add_argument("--use-rp-signal-quality-sizing", action="store_true")

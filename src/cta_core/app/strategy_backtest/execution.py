@@ -36,8 +36,6 @@ def execute_rp_daily_breakout(args: argparse.Namespace) -> int:
         rp_entry_confirm_bars=strategy_config.entry_confirmations,
         rp_exit_confirm_bars=strategy_config.exit_confirmations,
         allow_short=getattr(args, "allow_short", False),
-        regime_ema_window=getattr(args, "regime_ema_window", 30),
-        regime_min_slope=getattr(args, "regime_min_slope", 0.002),
         max_hold_bars=getattr(args, "max_hold_bars", 40),
         use_rp_chop_filter=getattr(args, "use_rp_chop_filter", False),
         use_rp_signal_quality_sizing=getattr(args, "use_rp_signal_quality_sizing", False),
