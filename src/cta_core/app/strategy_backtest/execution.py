@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import argparse
 
-from cta_core.app.turtle_backtest import run_turtle_backtest, write_backtest_output
+from cta_core.app.turtle_backtest import TurtleConfig, run_turtle_backtest, write_backtest_output
 from cta_core.config.run_config import RunConfig
 from cta_core.data.market_data_store import utc_ms
-from cta_core.app.turtle_backtest import TurtleConfig
 from cta_core.strategy_runtime.strategies.rp_daily_breakout import RPDailyBreakoutStrategy
 
 from .data_source import load_or_fetch
@@ -31,15 +30,20 @@ def execute_rp_daily_breakout(args: argparse.Namespace) -> int:
         fee_bps=run_cfg.fee_bps,
         slippage_bps=run_cfg.slippage_bps,
         max_leverage=run_cfg.max_leverage,
+        rp_window=strategy_config.rp_window,
+        rp_quantity=strategy_config.quantity,
         cooldown_bars=getattr(args, "cooldown_bars", 4),
         rp_entry_confirm_bars=strategy_config.entry_confirmations,
         rp_exit_confirm_bars=strategy_config.exit_confirmations,
-        allow_short=False,
+        allow_short=getattr(args, "allow_short", False),
+        regime_ema_window=getattr(args, "regime_ema_window", 30),
+        regime_min_slope=getattr(args, "regime_min_slope", 0.002),
+        max_hold_bars=getattr(args, "max_hold_bars", 40),
+        use_rp_chop_filter=getattr(args, "use_rp_chop_filter", False),
+        use_rp_signal_quality_sizing=getattr(args, "use_rp_signal_quality_sizing", False),
+        use_vol_target_sizing=getattr(args, "use_vol_target_sizing", False),
         use_htf_filter=False,
-        use_rp_chop_filter=False,
-        use_rp_signal_quality_sizing=False,
         use_regime_filter=False,
-        use_vol_target_sizing=False,
     )
     result = run_turtle_backtest(
         bars=bars,

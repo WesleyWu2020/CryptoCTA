@@ -70,6 +70,8 @@ class TurtleConfig:
     rp_turnover_window: int = 100
     rp_base_turnover: float = 0.02
     rp_max_turnover_cap: float = 0.8
+    rp_window: int = 3
+    rp_quantity: Decimal = Decimal("1")
     rp_entry_confirm_bars: int = 3
     rp_exit_confirm_bars: int = 3
     rp_entry_band_atr: float = 0.0
@@ -169,6 +171,10 @@ class TurtleConfig:
             raise ValueError("rp_base_turnover must be in [0, 1)")
         if not (0 < self.rp_max_turnover_cap <= 1):
             raise ValueError("rp_max_turnover_cap must be in (0, 1]")
+        if self.rp_window <= 0:
+            raise ValueError("rp_window must be > 0")
+        if self.rp_quantity <= 0:
+            raise ValueError("rp_quantity must be > 0")
         if self.rp_entry_confirm_bars < 1:
             raise ValueError("rp_entry_confirm_bars must be >= 1")
         if self.rp_exit_confirm_bars < 1:
@@ -1538,7 +1544,6 @@ def _run_rp_runtime_compat(
         base_turnover=config.rp_base_turnover,
         max_turnover_cap=config.rp_max_turnover_cap,
     )
-    reference_price = _reference_price_recursive(vwap=vwap, turnover=turnover)
     atr = _rolling_mean(values=_true_range(high=high, low=low, close=close), window=config.atr_lookback)
     warmup = max(
         1,
@@ -1547,49 +1552,16 @@ def _run_rp_runtime_compat(
         config.rp_slope_bars if config.use_rp_chop_filter else 1,
     )
 
-    above_rp_streak: list[int] = []
-    below_rp_streak: list[int] = []
-    above_rp_confirmed: list[bool] = []
-    below_rp_confirmed: list[bool] = []
-    above_run = 0
-    below_run = 0
-
-    for close_value, rp_value in zip(close, reference_price):
-        is_above = close_value > rp_value
-        is_below = close_value < rp_value
-
-        if is_above:
-            above_run += 1
-            below_run = 0
-        elif is_below:
-            below_run += 1
-            above_run = 0
-        else:
-            above_run = 0
-            below_run = 0
-
-        above_rp_streak.append(above_run)
-        below_rp_streak.append(below_run)
-        above_rp_confirmed.append(above_run >= config.rp_entry_confirm_bars)
-        below_rp_confirmed.append(below_run >= config.rp_exit_confirm_bars)
-
-    prepared = frame.with_columns(
-        pl.Series("rp", reference_price),
-        pl.Series("close_above_rp", [c > rp for c, rp in zip(close, reference_price)]),
-        pl.Series("close_below_rp", [c < rp for c, rp in zip(close, reference_price)]),
-        pl.Series("above_rp_streak", above_rp_streak),
-        pl.Series("below_rp_streak", below_rp_streak),
-        pl.Series("above_rp_confirmed", above_rp_confirmed),
-        pl.Series("below_rp_confirmed", below_rp_confirmed),
-    )
-
     strategy = RPDailyBreakoutStrategy(
         RPDailyBreakoutConfig(
+            rp_window=config.rp_window,
             entry_confirmations=config.rp_entry_confirm_bars,
             exit_confirmations=config.rp_exit_confirm_bars,
-            quantity=Decimal("1"),
+            quantity=config.rp_quantity,
         )
     )
+    prepared = strategy.prepare_features(frame)
+    reference_price = [float(v) for v in prepared.get_column("rp").to_list()]
     strategy.on_start(StrategyContext(symbol=symbol, bars=prepared))
 
     fee_rate = config.fee_bps / 10000.0
@@ -1642,14 +1614,18 @@ def _run_rp_runtime_compat(
                 and (fill_index - last_exit_bar) > config.cooldown_bars
             )
             enter_long = False
+            entry_size = 1.0
             if can_check_entry:
                 context = StrategyContext(symbol=symbol, bars=prepared.head(signal_index + 1))
                 decisions = strategy.on_bar(context)
-                enter_long = any(d.decision_type == StrategyDecisionType.ENTER_LONG for d in decisions)
+                enter_decision = next((d for d in decisions if d.decision_type == StrategyDecisionType.ENTER_LONG), None)
+                if enter_decision is not None:
+                    enter_long = True
+                    entry_size = float(enter_decision.size)
 
             if enter_long:
                 fill = _fill_price(side="BUY", base_price=open_price[fill_index], slippage_rate=slippage_rate)
-                qty = prev_equity * config.max_leverage / (fill * (1.0 + fee_rate)) if fill > 0 else 0.0
+                qty = prev_equity * config.max_leverage * entry_size / (fill * (1.0 + fee_rate)) if fill > 0 else 0.0
                 if qty > 0:
                     fee = qty * fill * fee_rate
                     cash -= qty * fill + fee
@@ -1671,8 +1647,8 @@ def _run_rp_runtime_compat(
                             "regime_slope": regime_slope,
                             "rp_slope_ratio": rp_slope_ratio,
                             "atr_ratio": atr_ratio,
-                            "signal_quality_scale": 1.0,
-                            "vol_target_allocation": config.max_leverage,
+                            "signal_quality_scale": entry_size,
+                            "vol_target_allocation": config.max_leverage * entry_size,
                             "equity_after": cash + position_qty * close[fill_index],
                         }
                     )
@@ -2317,6 +2293,8 @@ def _config_dict(cfg: TurtleConfig) -> dict[str, object]:
         "rp_turnover_window": cfg.rp_turnover_window,
         "rp_base_turnover": cfg.rp_base_turnover,
         "rp_max_turnover_cap": cfg.rp_max_turnover_cap,
+        "rp_window": cfg.rp_window,
+        "rp_quantity": float(cfg.rp_quantity),
         "rp_entry_confirm_bars": cfg.rp_entry_confirm_bars,
         "rp_exit_confirm_bars": cfg.rp_exit_confirm_bars,
         "rp_entry_band_atr": cfg.rp_entry_band_atr,

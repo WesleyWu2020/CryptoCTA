@@ -62,6 +62,25 @@ def _seed_duckdb(db_path: Path) -> None:
     upsert_klines_to_duckdb(db_path=db_path, bars=bars)
 
 
+def _seed_rp_window_sensitive_duckdb(db_path: Path) -> None:
+    close = [10.0, 20.0, 18.0, 19.0, 21.0, 20.0, 18.0]
+    step_ms = 86400000
+    bars = pl.DataFrame(
+        {
+            "symbol": ["BTCUSDT"] * len(close),
+            "interval": ["1d"] * len(close),
+            "open_time": [i * step_ms for i in range(len(close))],
+            "open": close,
+            "high": [value + 1.0 for value in close],
+            "low": [value - 1.0 for value in close],
+            "close": close,
+            "volume": [1000.0] * len(close),
+            "close_time": [((i + 1) * step_ms) - 1 for i in range(len(close))],
+        }
+    )
+    upsert_klines_to_duckdb(db_path=db_path, bars=bars)
+
+
 def test_list_strategies_prints_registered_ids():
     result = _run_script("--list-strategies")
     assert result.returncode == 0
@@ -128,6 +147,63 @@ def test_rp_daily_breakout_executes_and_writes_output(tmp_path: Path):
     assert payload["interval"] == "1d"
     assert payload["data_source"] == f"duckdb:{db_path}"
     assert payload["summary"]["closed_trades"] >= 1
+
+
+def test_rp_native_args_change_entry_timing_and_size(tmp_path: Path):
+    db_path = tmp_path / "klines.duckdb"
+    output_a = tmp_path / "backtest_a.json"
+    output_b = tmp_path / "backtest_b.json"
+    _seed_rp_window_sensitive_duckdb(db_path)
+
+    result_a = _run_script(
+        "--strategy",
+        "rp_daily_breakout",
+        "--symbol",
+        "BTCUSDT",
+        "--interval",
+        "1d",
+        "--start",
+        "1970-01-01",
+        "--end",
+        "1970-01-20",
+        "--db-path",
+        str(db_path),
+        "--output",
+        str(output_a),
+        "--rp-window",
+        "1",
+        "--quantity",
+        "1",
+    )
+    result_b = _run_script(
+        "--strategy",
+        "rp_daily_breakout",
+        "--symbol",
+        "BTCUSDT",
+        "--interval",
+        "1d",
+        "--start",
+        "1970-01-01",
+        "--end",
+        "1970-01-20",
+        "--db-path",
+        str(db_path),
+        "--output",
+        str(output_b),
+        "--rp-window",
+        "5",
+        "--quantity",
+        "0.2",
+    )
+
+    assert result_a.returncode == 0, result_a.stderr
+    assert result_b.returncode == 0, result_b.stderr
+
+    payload_a = json.loads(output_a.read_text(encoding="utf-8"))
+    payload_b = json.loads(output_b.read_text(encoding="utf-8"))
+
+    assert payload_a["trades"][0]["open_time"] != payload_b["trades"][0]["open_time"]
+    assert payload_a["trades"][0]["qty"] != payload_b["trades"][0]["qty"]
 
 
 def test_unsupported_strategy_execution_fails_clearly():

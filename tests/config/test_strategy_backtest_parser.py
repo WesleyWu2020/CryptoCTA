@@ -12,6 +12,13 @@ def test_parse_args_applies_rp_preset_defaults(monkeypatch) -> None:
         strategy_id="test_preset",
         description="test",
         defaults={
+            "allow_short": True,
+            "regime_ema_window": 21,
+            "regime_min_slope": 0.01,
+            "max_hold_bars": 12,
+            "use_rp_chop_filter": True,
+            "use_rp_signal_quality_sizing": True,
+            "use_vol_target_sizing": True,
             "rp_entry_confirm_bars": 5,
             "rp_exit_confirm_bars": 4,
         },
@@ -27,5 +34,12 @@ def test_parse_args_applies_rp_preset_defaults(monkeypatch) -> None:
     config = RPDailyBreakoutStrategy.config_from_args(args)
 
     assert isinstance(config, RPDailyBreakoutConfig)
+    assert args.allow_short is True
+    assert args.regime_ema_window == 21
+    assert args.regime_min_slope == 0.01
+    assert args.max_hold_bars == 12
+    assert args.use_rp_chop_filter is True
+    assert args.use_rp_signal_quality_sizing is True
+    assert args.use_vol_target_sizing is True
     assert config.entry_confirmations == 5
     assert config.exit_confirmations == 4
