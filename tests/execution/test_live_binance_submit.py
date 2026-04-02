@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from cta_core.events import OrderIntent, Side
 from cta_core.execution.live_binance import LiveBinanceAdapter
 
@@ -45,11 +47,30 @@ def test_submit_order_signs_market_order_and_uses_deterministic_client_order_id(
     assert captured["data"]["side"] == "BUY"
     assert captured["data"]["type"] == "MARKET"
     assert captured["data"]["quantity"] == "0.01"
-    assert captured["data"]["newClientOrderId"] == adapter.client_order_id(
+    assert captured["data"]["newClientOrderId"] == "2a8a8eeb26e06a00d244a8791e6c80cf"
+    assert captured["data"]["timestamp"] == 1725148800000
+    assert captured["data"]["signature"] == "568f12029fc44025ab9a21825d5357ee13972caef90f575a6fa324ecc343655b"
+
+
+def test_submit_order_rejects_non_market_orders_without_http_call(monkeypatch):
+    called = {"post": False}
+
+    def fake_post(url, headers, data, timeout):
+        called["post"] = True
+        return _FakeResponse({"orderId": 123, "status": "NEW"})
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    adapter = LiveBinanceAdapter(api_key="k", api_secret="s")
+    intent = OrderIntent(
         strategy_id="sma",
         symbol="BTCUSDT",
-        ts_ms=1725148800000,
+        side=Side.BUY,
+        quantity=Decimal("0.01"),
+        order_type="LIMIT",
     )
-    assert "timestamp" in captured["data"]
-    assert "signature" in captured["data"]
 
+    with pytest.raises(ValueError, match="MARKET orders"):
+        adapter.submit_order(intent=intent, ts_ms=1725148800000)
+
+    assert called["post"] is False
