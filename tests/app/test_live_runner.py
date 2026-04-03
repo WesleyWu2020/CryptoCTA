@@ -389,7 +389,9 @@ def test_live_run_config_from_args() -> None:
     assert config.dry_run is True
 
 
-def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_live_loop_uses_full_history_context_when_new_closed_bar_arrives(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     run_once_calls: list[dict[str, object]] = []
     saved_states: list[LiveRuntimeState] = []
 
@@ -459,7 +461,7 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
         run_once_calls.append(kwargs)
         bars = kwargs["bars"]
         assert isinstance(bars, pl.DataFrame)
-        assert bars.get_column("open_time").to_list() == [2_000]
+        assert bars.get_column("open_time").to_list() == [1_000, 2_000]
         return {
             "latest_open_time": 2_000,
             "submit_count": 1,
@@ -506,7 +508,7 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
 
     assert result == 0
     assert len(run_once_calls) == 1
-    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [2_000]
+    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [1_000, 2_000]
     assert snapshot_calls == [("BTCUSDT", 3_100)]
     assert saved_states[-1].last_processed_open_time == 2_000
     assert saved_states[-1].last_submit_ts_ms == 2_000
@@ -568,7 +570,7 @@ def test_run_live_loop_dry_run_uses_local_snapshot_without_bootstrap_or_account_
         assert kwargs["day_pnl"] == Decimal("0")
         assert kwargs["losing_streak"] == 0
         assert kwargs["symbol_notional"] == Decimal("0")
-        assert kwargs["bars"].get_column("open_time").to_list() == [2_000]
+        assert kwargs["bars"].get_column("open_time").to_list() == [1_000, 2_000]
         return {
             "latest_open_time": 2_000,
             "submit_count": 0,

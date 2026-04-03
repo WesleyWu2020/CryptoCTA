@@ -252,7 +252,7 @@ def run_live_loop(
                 result = run_once(
                     strategy=strategy,
                     adapter=adapter,
-                    bars=new_bars,
+                    bars=bars,
                     symbol=config.symbol,
                     dry_run=config.dry_run,
                     position_qty=snapshot.position_qty,
