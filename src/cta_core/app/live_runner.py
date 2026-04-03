@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import polars as pl
@@ -199,9 +200,14 @@ def run_live_loop(
     sleep_fn=time.sleep,
     now_ms_fn=lambda: time.time_ns() // 1_000_000,
 ) -> int:
+    if config.max_cycles is not None and config.max_cycles <= 0:
+        return 0
+
     validate_live_mode(dry_run=config.dry_run, api_key=config.api_key, api_secret=config.api_secret)
     strategy = build_strategy(config.strategy_id)
-    adapter = bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
+    adapter = None
+    if not config.dry_run:
+        adapter = bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
     risk_engine = RiskEngine(
         max_daily_loss=config.max_daily_loss,
         max_losing_streak=config.max_losing_streak,
@@ -233,7 +239,16 @@ def run_live_loop(
                     strategy.on_start(last_context)
                     started = True
 
-                snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
+                if config.dry_run:
+                    snapshot = SimpleNamespace(
+                        position_qty=Decimal("0"),
+                        equity=Decimal("0"),
+                        day_pnl=Decimal("0"),
+                        losing_streak=0,
+                        symbol_notional=Decimal("0"),
+                    )
+                else:
+                    snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
                 result = run_once(
                     strategy=strategy,
                     adapter=adapter,

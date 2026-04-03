@@ -430,14 +430,15 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
         pass
 
     strategy = FakeStrategy()
+    snapshot_calls: list[tuple[str, int]] = []
 
     def fake_build_strategy(strategy_id: str) -> FakeStrategy:
         assert strategy_id == "rp_daily_breakout"
         return strategy
 
     def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> FakeAdapter:
-        assert api_key == ""
-        assert api_secret == ""
+        assert api_key == "key"
+        assert api_secret == "secret"
         return FakeAdapter()
 
     def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
@@ -470,6 +471,115 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
     def fake_save_live_state(path, state: LiveRuntimeState) -> None:
         saved_states.append(state)
 
+    original_fetch_account_snapshot = FakeAdapter.fetch_account_snapshot
+
+    def wrapped_fetch_account_snapshot(self, symbol: str, now_ms: int) -> object:
+        snapshot_calls.append((symbol, now_ms))
+        return original_fetch_account_snapshot(self, symbol, now_ms)
+
+    FakeAdapter.fetch_account_snapshot = wrapped_fetch_account_snapshot
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", fake_load_live_state)
+    monkeypatch.setattr(live_runner, "save_live_state", fake_save_live_state)
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(
+            [
+                "--strategy",
+                "rp_daily_breakout",
+                "--api-key",
+                "key",
+                "--api-secret",
+                "secret",
+                "--max-cycles",
+                "1",
+            ]
+        ),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert len(run_once_calls) == 1
+    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [2_000]
+    assert snapshot_calls == [("BTCUSDT", 3_100)]
+    assert saved_states[-1].last_processed_open_time == 2_000
+    assert saved_states[-1].last_submit_ts_ms == 2_000
+    assert strategy.started is True
+    assert strategy.finished is True
+
+
+def test_run_live_loop_dry_run_uses_local_snapshot_without_bootstrap_or_account_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_once_calls: list[dict[str, object]] = []
+    saved_states: list[LiveRuntimeState] = []
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            return None
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            return None
+
+    class FakeMarketClient:
+        pass
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> object:
+        raise AssertionError("bootstrap_live_runner should not be called in dry-run mode")
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        assert isinstance(client, FakeMarketClient)
+        assert symbol == "BTCUSDT"
+        assert interval == "1h"
+        assert lookback_bars == 300
+        assert now_ms == 3_100
+        return pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        )
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        run_once_calls.append(kwargs)
+        assert kwargs["dry_run"] is True
+        assert kwargs["adapter"] is None
+        assert kwargs["position_qty"] == Decimal("0")
+        assert kwargs["equity"] == Decimal("0")
+        assert kwargs["day_pnl"] == Decimal("0")
+        assert kwargs["losing_streak"] == 0
+        assert kwargs["symbol_notional"] == Decimal("0")
+        assert kwargs["bars"].get_column("open_time").to_list() == [2_000]
+        return {
+            "latest_open_time": 2_000,
+            "submit_count": 0,
+        }
+
+    def fake_load_live_state(path) -> LiveRuntimeState:
+        return LiveRuntimeState(last_processed_open_time=1_000)
+
+    def fake_save_live_state(path, state: LiveRuntimeState) -> None:
+        saved_states.append(state)
+
     monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
     monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
     monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
@@ -486,11 +596,43 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
 
     assert result == 0
     assert len(run_once_calls) == 1
-    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [2_000]
     assert saved_states[-1].last_processed_open_time == 2_000
-    assert saved_states[-1].last_submit_ts_ms == 2_000
-    assert strategy.started is True
-    assert strategy.finished is True
+    assert saved_states[-1].last_submit_ts_ms is None
+
+
+@pytest.mark.parametrize("max_cycles", [0, -1])
+def test_run_live_loop_skips_execution_when_max_cycles_non_positive(
+    monkeypatch: pytest.MonkeyPatch,
+    max_cycles: int,
+) -> None:
+    def fail_build_strategy(strategy_id: str) -> object:
+        raise AssertionError("build_strategy should not be called when max_cycles is non-positive")
+
+    def fail_bootstrap_live_runner(*, api_key: str, api_secret: str) -> object:
+        raise AssertionError("bootstrap_live_runner should not be called when max_cycles is non-positive")
+
+    def fail_fetch_closed_bars(**kwargs) -> pl.DataFrame:
+        raise AssertionError("fetch_closed_bars should not be called when max_cycles is non-positive")
+
+    monkeypatch.setattr(live_runner, "build_strategy", fail_build_strategy)
+    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fail_bootstrap_live_runner)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fail_fetch_closed_bars)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(
+            [
+                "--strategy",
+                "rp_daily_breakout",
+                "--dry-run",
+                "--max-cycles",
+                str(max_cycles),
+            ]
+        ),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
 
 
 def test_main_runs_live_loop(monkeypatch: pytest.MonkeyPatch) -> None:
