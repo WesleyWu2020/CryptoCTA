@@ -32,7 +32,8 @@ def fetch_closed_bars(
 
     try:
         bars = normalize_klines(symbol=symbol, interval=interval, rows=rows).sort("open_time")
-    except Exception:
+    except Exception as exc:
+        print(f"fetch_closed_bars normalize_klines failed symbol={symbol} interval={interval}: {exc}")
         return _empty_normalized_frame(symbol, interval)
 
     cutoff_ms = now_ms if now_ms is not None else time.time_ns() // 1_000_000

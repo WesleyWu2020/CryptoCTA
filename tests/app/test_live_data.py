@@ -68,7 +68,9 @@ def test_fetch_closed_bars_rejects_non_positive_lookback() -> None:
         )
 
 
-def test_fetch_closed_bars_returns_empty_frame_for_malformed_rows() -> None:
+def test_fetch_closed_bars_returns_empty_frame_for_malformed_rows(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     client = FakeClient(rows=[[1000, "10"]])
 
     bars = live_data.fetch_closed_bars(
@@ -82,6 +84,10 @@ def test_fetch_closed_bars_returns_empty_frame_for_malformed_rows() -> None:
     expected = normalize_klines(symbol="BTCUSDT", interval="1m", rows=[])
     assert bars.height == 0
     assert bars.columns == expected.columns
+    captured = capsys.readouterr()
+    assert "fetch_closed_bars normalize_klines failed" in captured.out
+    assert "BTCUSDT" in captured.out
+    assert "1m" in captured.out
 
 
 def test_fetch_closed_bars_returns_empty_frame_for_empty_rows() -> None:
