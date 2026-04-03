@@ -220,6 +220,26 @@ def test_sync_strategy_position_state_sets_open_when_exchange_has_long() -> None
     assert decisions[0].decision_type is StrategyDecisionType.EXIT_LONG
 
 
+def test_sync_strategy_position_state_does_not_set_open_when_exchange_is_net_short() -> None:
+    strategy = RPDailyBreakoutStrategy(
+        RPDailyBreakoutConfig(rp_window=2, entry_confirmations=2, exit_confirmations=2, quantity=Decimal("1"))
+    )
+    symbol = "BTCUSDT"
+    bars = pl.DataFrame(
+        {
+            "open_time": [1_000, 2_000, 3_000],
+            "close": [10.0, 9.0, 8.0],
+        }
+    )
+
+    live_runner.sync_strategy_position_state(strategy, symbol, position_qty=Decimal("-0.2"))
+
+    prepared_bars = strategy.prepare_features(bars.sort("open_time"))
+    decisions = strategy.on_bar(StrategyContext(symbol=symbol, bars=prepared_bars))
+
+    assert decisions == []
+
+
 def test_run_once_non_dry_submit_uses_latest_open_time() -> None:
     bars = pl.DataFrame(
         {
@@ -685,6 +705,97 @@ def test_run_live_loop_does_not_reprocess_same_open_time(
 
     assert result == 0
     assert len(run_once_calls) == 1
+
+
+def test_run_live_loop_reprocesses_only_newly_advanced_open_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_once_calls: list[dict[str, object]] = []
+    saved_states: list[LiveRuntimeState] = []
+    cycle_bars = [
+        pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        ),
+        pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        ),
+        pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000, 3_000],
+                "close_time": [1_999, 2_999, 3_999],
+                "close": [10.0, 11.0, 12.0],
+            }
+        ),
+    ]
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            return None
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            return None
+
+    class FakeMarketClient:
+        pass
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        assert isinstance(client, FakeMarketClient)
+        return cycle_bars.pop(0)
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        run_once_calls.append(kwargs)
+        latest_open_time = kwargs["bars"].get_column("open_time").max()
+        return {
+            "latest_open_time": latest_open_time,
+            "submit_count": 0,
+        }
+
+    def fake_load_live_state(path) -> LiveRuntimeState:
+        return LiveRuntimeState(last_processed_open_time=1_000)
+
+    def fake_save_live_state(path, state: LiveRuntimeState) -> None:
+        saved_states.append(state)
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", fake_load_live_state)
+    monkeypatch.setattr(live_runner, "save_live_state", fake_save_live_state)
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(["--strategy", "rp_daily_breakout", "--dry-run", "--max-cycles", "3"]),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert len(run_once_calls) == 2
+    assert [call["bars"].get_column("open_time").to_list() for call in run_once_calls] == [
+        [1_000, 2_000],
+        [1_000, 2_000, 3_000],
+    ]
+    assert [state.last_processed_open_time for state in saved_states] == [2_000, 3_000]
 
 
 @pytest.mark.parametrize("max_cycles", [0, -1])

@@ -86,9 +86,48 @@ def test_fetch_account_snapshot_uses_signed_endpoints(monkeypatch):
 
     assert snapshot.equity == Decimal("1010")
     assert snapshot.symbol_notional == Decimal("5000")
-    assert snapshot.position_qty == Decimal("0.25")
+    assert snapshot.position_qty == Decimal("0.05")
     assert snapshot.day_pnl == Decimal("-13")
     assert snapshot.losing_streak == 0
+
+
+def test_fetch_account_snapshot_keeps_directional_position_qty_for_net_short(monkeypatch):
+    payloads = {
+        "/fapi/v2/account": {
+            "totalWalletBalance": "100",
+            "totalUnrealizedProfit": "0",
+        },
+        "/fapi/v2/positionRisk": [
+            {
+                "symbol": "BTCUSDT",
+                "positionAmt": "-0.40",
+                "notional": "-8000",
+            },
+            {
+                "symbol": "BTCUSDT",
+                "positionAmt": "0.10",
+                "notional": "2000",
+            },
+            {
+                "symbol": "ETHUSDT",
+                "positionAmt": "-1.00",
+                "notional": "-1500",
+            },
+        ],
+        "/fapi/v1/userTrades": [],
+    }
+
+    def fake_get(url, params, headers, timeout):
+        path = urlparse(url).path
+        return _FakeResponse(payloads[path])
+
+    monkeypatch.setattr(live_binance.httpx, "get", fake_get)
+
+    adapter = LiveBinanceAdapter(api_key="api-key", api_secret="secret")
+    snapshot = adapter.fetch_account_snapshot(symbol="BTCUSDT", now_ms=1725148800000)
+
+    assert snapshot.symbol_notional == Decimal("10000")
+    assert snapshot.position_qty == Decimal("-0.30")
 
 
 def test_fetch_account_snapshot_counts_losing_streak_from_latest_trades(monkeypatch):

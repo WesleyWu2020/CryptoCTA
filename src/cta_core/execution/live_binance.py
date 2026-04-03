@@ -85,7 +85,7 @@ class LiveBinanceAdapter:
             if position.get("symbol") != symbol:
                 continue
             symbol_notional += abs(Decimal(str(position["notional"])))
-            position_qty += abs(Decimal(str(position["positionAmt"])))
+            position_qty += Decimal(str(position["positionAmt"]))
         return symbol_notional, position_qty
 
     def fetch_account_snapshot(self, symbol: str, now_ms: int | None = None) -> LiveAccountSnapshot:
