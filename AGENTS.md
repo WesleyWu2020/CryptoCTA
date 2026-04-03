@@ -1,119 +1,92 @@
 # AGENTS.md
 
-Guidance for AI/human coding agents working in this repository.
+Landing page for AI/human agents in this repo.
 
-## 1) Current Code Structure (Re-baselined)
+## What This Project Is
+- Crypto CTA framework with shared contracts for backtest and live trading.
+- Core domains live in `src/cta_core/`: data, events, execution, risk, ops, strategy runtime.
+- Main usage is strategy backtesting via CLI scripts and runtime engine.
 
-### 1.1 Layered Architecture
+## Quick Structure
+- Runner/orchestration: `src/cta_core/app/`
+  - `strategy_backtest/`, `strategy_presets/`, `backtest_runner.py`, `live_runner.py`
+- Strategy runtime: `src/cta_core/strategy_runtime/`
+  - `base.py`, `engine.py`, `registry.py`, `strategies/`
+- Entry scripts:
+  - `scripts/run_strategy_backtest.py` (canonical)
+  - `scripts/run_turtle_backtest.py` (compat wrapper)
 
-1. Runner/Orchestration layer (`src/cta_core/app/`)
-- `strategy_backtest/`: generic strategy backtest entry (`main`), CLI parsing, execution routing, data-source selection.
-- `strategy_presets/`: named preset defaults (`BacktestStrategyPreset`) for runnable strategies.
-- `turtle_backtest.py`: compatibility backtest pipeline used by current RP execution path.
-- `backtest_runner.py`: minimal replay contract (`{"events": [...]}`) for event-sequence outputs.
-- `live_runner.py`: bootstrap for live adapter wiring.
+## How To Run
+- Install deps:
 
-2. Strategy Runtime layer (`src/cta_core/strategy_runtime/`)
-- `base.py`: core runtime contracts (`StrategyContext`, `StrategyDecision`, `BaseStrategy`, position model).
-- `engine.py`: strategy-agnostic backtest engine and fill/accounting loop.
-- `registry.py`: strategy id -> factory mapping.
-- `interfaces.py` + `runtime.py`: lightweight bar-close strategy interface support.
-- `strategies/`: concrete strategy implementations (`rp_daily_breakout`, `sma_cross`).
+```bash
+make setup
+```
 
-3. Domain/Infrastructure layer (`src/cta_core/`)
-- `data/`: Binance ingest, normalization, DuckDB upsert/read, lookahead-safe `DataPortal`.
-- `events/`: shared event/order/fill contracts.
-- `execution/`: simulated fill model + live Binance adapter.
-- `risk/`: deterministic risk rules and explainable risk results.
-- `ops/`: monitoring alert checks.
-- `config/`: pydantic runtime settings.
-- `bindings/`: Python bridge for Rust ledger extension.
+- Run a strategy backtest (canonical script):
 
-4. Entry Scripts (`scripts/`)
-- `run_strategy_backtest.py`: canonical CLI entry for registered strategies.
-- `run_turtle_backtest.py`: compatibility wrapper that forwards to generic strategy runner.
-- Other scripts (`ingest_klines_to_duckdb.py`, `walkforward_turtle.py`, `ablation_single_factor.py`) are research/ops utilities.
+```bash
+PYTHONPATH=src python scripts/run_strategy_backtest.py --help
+```
 
-### 1.2 Boundary Rules
+- Turtle compatibility path:
 
-- Keep strategy-specific signal logic inside `strategy_runtime/strategies/`, not in runners.
-- Keep runner code focused on argument parsing, data loading, strategy selection, and output writing.
-- Keep engine code strategy-agnostic (no RP-only branching inside generic runtime abstractions).
-- Treat `events.models` as shared contracts across backtest/live paths.
+```bash
+PYTHONPATH=src python scripts/run_turtle_backtest.py --help
+```
 
-## 2) Working Rules
+## How To Validate
+- Standard checks:
 
-- Keep changes task-scoped and minimal.
-- Preserve module boundaries described above.
-- Prefer explicit, test-backed behavior changes over broad refactors.
-- Do not remove or rewrite user-authored work unless explicitly requested.
-- Avoid destructive git operations (`reset --hard`, force checkout, etc.) unless explicitly approved.
+```bash
+make check
+```
 
-## 3) Quality Gates
-
-Before claiming completion, run:
+- Required test gate before claiming completion:
 
 ```bash
 PYTHONPATH=src pytest -q
 ```
 
-If you touch Rust ledger bindings, also run:
+- If Rust ledger bindings were touched:
 
 ```bash
 maturin develop --manifest-path rust/ledger_core/Cargo.toml
 PYTHONPATH=src pytest tests/bindings/test_ledger_binding.py -q
 ```
 
-Recommended focused test scopes before full suite:
+- Recommended focused scopes first:
+  - `PYTHONPATH=src pytest tests/strategy -q`
+  - `PYTHONPATH=src pytest tests/integration/test_run_strategy_backtest.py -q`
 
-- `tests/strategy/` for `strategy_runtime/*`
-- `tests/integration/test_run_strategy_backtest.py` for runner/script behavior
-- `tests/data/` for ingest/store/portal changes
-- `tests/execution/`, `tests/risk/`, `tests/events/`, `tests/ops/` for domain modules
+## Critical Rules (Do Not Break)
+- Keep strategy logic inside `src/cta_core/strategy_runtime/strategies/`.
+- Keep runners focused on parsing, loading, routing, and output.
+- Keep `strategy_runtime/engine.py` strategy-agnostic.
+- Treat `cta_core.events.models` as shared contracts; avoid silent breaking changes.
+- Keep `DataPortal` lookahead-safe (no future-bar access).
+- Keep risk outputs deterministic and explainable (`rule` + `detail`).
+- Strategy registration is explicit via `cta_core.strategy_runtime.registry`.
+- Keep module docs near code and update them with related code changes:
+  - `src/cta_core/strategy_runtime/ARCHITECTURE.md`
+  - `src/cta_core/data/CONSTRAINTS.md`
+  - `src/cta_core/execution/CONSTRAINTS.md`
+  - `src/cta_core/risk/CONSTRAINTS.md`
+- CI enforces doc drift for these modules via `make docs-drift-check`.
 
-## 4) Project-Specific Constraints
+## No-Lookahead / Timing Rules
+- Define timing semantics in code comments/tests: `signal_bar` vs `fill_bar`.
+- `signal_bar = t`: signals may only use data up to bar `t` close.
+- For app strategy backtest execution path, fills are `fill_bar = t+1`.
+- Do not introduce future leaks (`shift(-1)`, `pct_change(-1)`, `center=True`, `iloc[i+1]`, `bfill` on signal columns).
+- Any timing/exit/MTF alignment change must include tests, including at least one anti-lookahead test.
 
-- Event contracts in `cta_core.events.models` are shared interfaces; avoid silent breaking changes.
-- `DataPortal` must remain lookahead-safe (no future-bar access).
-- Risk checks should remain deterministic and explainable (`rule` + `detail`).
-- Backtest replay output contract is `{"events": [...]}` with ordered event records.
-- `LiveBinanceAdapter.client_order_id(...)` is intentionally deterministic for idempotency.
-- Strategy registration must stay explicit via `cta_core.strategy_runtime.registry` (no implicit dynamic loading).
+## Working Style
+- Keep changes minimal and task-scoped.
+- Prefer explicit, test-backed behavior changes over broad refactors.
+- Do not rewrite/remove user-authored work unless asked.
+- Avoid destructive git operations unless explicitly approved.
+- Record important architecture/constraint decisions in `DECISIONS.md`.
 
-## 4.1) CTA Strategy Flow and No-Lookahead Rules
-
-- Every strategy/backtest path must explicitly define timing semantics (`signal_bar` vs `fill_bar`) in code comments or tests.
-- `signal_bar = t` means indicators/signals only use data up to bar `t` close.
-- `fill_bar = t+1` for `src/cta_core/app/strategy_backtest/execution.py` path (entry/exit filled from next bar open with fee/slippage model).
-- `src/cta_core/strategy_runtime/engine.py` currently fills on current bar close; if used, document this assumption in tests and output notes.
-- Always sort bars by `open_time` ascending before feature generation and backtest loop.
-- Indicator warmup must not use future values (`bfill` or equivalent future-derived backfilling is forbidden for signal columns).
-- Future-leak patterns are forbidden in signal logic: `shift(-1)`, `pct_change(-1)`, `rolling(..., center=True)`, `iloc[i+1]`, or any direct read of next bar OHLC for current decision.
-- Multi-timeframe merge must only use closed HTF bars (`htf_close_time <= signal_time`); never use unfinished HTF bars.
-- Stop-loss / take-profit simulation must keep trigger-vs-fill timing explicit and consistent with the execution model; do not implicitly fill at signal-bar extreme prices unless the engine explicitly models intrabar fill priority.
-- Any change touching signal timing, exits, or MTF alignment must add/update tests.
-- At least one anti-lookahead test is required: perturb future bars and assert historical decisions/trades before the perturbation point remain unchanged.
-- Code review quick check (recommended):
-
-```bash
-rg -n "shift\(-1\)|pct_change\(-1\)|center\s*=\s*True|iloc\[.*\+1\]|bfill\(" src tests
-```
-
-## 5) File/Artifact Hygiene
-
-Do not commit generated artifacts such as:
-
-- `__pycache__/`
-- `build/`
-- `rust/ledger_core/target/`
-- `*.egg-info/`
-
-If these appear locally, leave them untracked unless the user asks otherwise.
-
-## 6) Preferred Workflow
-
-1. Read relevant module + tests first.
-2. Add or update tests for the intended behavior.
-3. Implement the minimal code change.
-4. Run focused tests, then full suite.
-5. Commit with a clear, scoped message.
+## More Details
+- Full detailed handbook moved to: `docs/dev/agent-rules.md`

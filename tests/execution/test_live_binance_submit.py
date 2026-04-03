@@ -8,8 +8,6 @@ from urllib.parse import urlencode
 
 import pytest
 
-import pytest
-
 from cta_core.events.models import OrderIntent, Side
 from cta_core.execution import live_binance
 from cta_core.execution.live_binance import LiveBinanceAdapter
@@ -80,44 +78,6 @@ def test_submit_order_sends_signed_request_and_returns_json(monkeypatch):
         "timestamp": 1725148800000,
         "signature": expected_signature,
     }
-
-
-def test_submit_order_rejects_unsupported_order_type():
-    adapter = LiveBinanceAdapter(api_key="api-key", api_secret="secret")
-    intent = OrderIntent(
-        strategy_id="sma_cross",
-        symbol="BTCUSDT",
-        side=Side.BUY,
-        quantity=Decimal("0.01"),
-        order_type="LIMIT",
-        limit_price=Decimal("100"),
-    )
-
-    with pytest.raises(ValueError, match="MARKET-only"):
-        adapter.submit_order(intent, ts_ms=1725148800000)
-
-
-def test_submit_order_formats_tiny_quantity_without_scientific_notation(monkeypatch):
-    captured = {}
-
-    def fake_post(url, params, headers, timeout):
-        captured["params"] = params
-        return _FakeResponse({"orderId": 456})
-
-    monkeypatch.setattr(live_binance.httpx, "post", fake_post)
-
-    adapter = LiveBinanceAdapter(api_key="api-key", api_secret="secret")
-    intent = OrderIntent(
-        strategy_id="sma_cross",
-        symbol="BTCUSDT",
-        side=Side.BUY,
-        quantity=Decimal("0.00000001"),
-        order_type="MARKET",
-    )
-
-    adapter.submit_order(intent, ts_ms=1725148800000)
-
-    assert captured["params"]["quantity"] == "0.00000001"
 
 
 def test_submit_order_rejects_unsupported_order_type():

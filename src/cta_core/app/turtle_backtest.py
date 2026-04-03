@@ -326,7 +326,6 @@ def run_turtle_backtest(
 
     pending_addon: dict[str, object] | None = None
     pending_pullback_entry: dict[str, object] | None = None
-    pending_breakout_confirm: dict[str, object] | None = None
 
     open_legs: list[dict[str, float | str]] = []
     breakout_entry_alpha_pnl = 0.0
@@ -499,7 +498,6 @@ def run_turtle_backtest(
                     position_entry_fee = max(0.0, position_entry_fee - consumed_entry_fee)
                     pending_addon = None
                     pending_pullback_entry = None
-                    pending_breakout_confirm = None
                     initial_stop_distance = 0.0
                     take_profit_done = False
                     entry_bar_index = None
@@ -558,7 +556,6 @@ def run_turtle_backtest(
                     position_entry_fee = max(0.0, position_entry_fee - consumed_entry_fee)
                     pending_addon = None
                     pending_pullback_entry = None
-                    pending_breakout_confirm = None
                     initial_stop_distance = 0.0
                     take_profit_done = False
                     entry_bar_index = None
@@ -1983,10 +1980,10 @@ def _position_size(
 def _true_range(*, high: list[float], low: list[float], close: list[float]) -> list[float]:
     values: list[float] = []
     prev_close = close[0]
-    for h, l, c in zip(high, low, close):
-        tr = max(h - l, abs(h - prev_close), abs(l - prev_close))
+    for high_value, low_value, close_value in zip(high, low, close):
+        tr = max(high_value - low_value, abs(high_value - prev_close), abs(low_value - prev_close))
         values.append(tr)
-        prev_close = c
+        prev_close = close_value
     return values
 
 

@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: setup-python
         uses: actions/setup-python@v5
@@ -24,5 +26,17 @@ jobs:
           python -m pip install -U pip
           pip install -e ".[dev]"
 
+      - name: docs-check
+        run: make docs-check
+
+      - name: docs-drift-check
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: make docs-drift-check BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA"
+
+      - name: lint
+        run: make lint
+
       - name: pytest
-        run: PYTHONPATH=src pytest -q
+        run: make test

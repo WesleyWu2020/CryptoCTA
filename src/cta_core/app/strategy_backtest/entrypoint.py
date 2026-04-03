@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from cta_core.strategy_runtime.registry import build_strategy, get_strategy_class, list_strategy_ids
+from cta_core.strategy_runtime.registry import build_strategy, list_strategy_ids
 
 from .constants import SUPPORTED_EXECUTION_STRATEGIES, UNSUPPORTED_HTF_EXECUTION_OPTIONS
 from .execution import (

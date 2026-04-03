@@ -4,9 +4,8 @@ import argparse
 import json
 from bisect import bisect_left
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 import duckdb
 import polars as pl

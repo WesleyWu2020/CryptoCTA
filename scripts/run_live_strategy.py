@@ -8,7 +8,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from cta_core.app.live_runner import main
+from cta_core.app.live_runner import main  # noqa: E402
 
 
 if __name__ == "__main__":
