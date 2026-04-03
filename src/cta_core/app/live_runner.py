@@ -295,8 +295,8 @@ def run_live_loop(
                     losing_streak=snapshot.losing_streak,
                     symbol_notional=snapshot.symbol_notional,
                 )
-                submit_attempts += int(result.get("decisions_count", 0))
-                submit_errors += len(result.get("risk_rejections", []))
+                submit_attempts += int(result["decisions_count"])
+                submit_errors += len(result["risk_rejections"])
                 alerts = compute_runtime_alerts(
                     peak_equity=peak_equity,
                     current_equity=float(snapshot.equity),

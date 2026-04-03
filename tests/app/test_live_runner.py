@@ -530,7 +530,9 @@ def test_run_live_loop_uses_full_history_context_when_new_closed_bar_arrives(
         assert isinstance(bars, pl.DataFrame)
         assert bars.get_column("open_time").to_list() == [1_000, 2_000]
         return {
+            "decisions_count": 0,
             "latest_open_time": 2_000,
+            "risk_rejections": [],
             "submit_count": 1,
         }
 
@@ -639,7 +641,9 @@ def test_run_live_loop_dry_run_uses_local_snapshot_without_bootstrap_or_account_
         assert kwargs["symbol_notional"] == Decimal("0")
         assert kwargs["bars"].get_column("open_time").to_list() == [1_000, 2_000]
         return {
+            "decisions_count": 0,
             "latest_open_time": 2_000,
+            "risk_rejections": [],
             "submit_count": 0,
         }
 
@@ -709,7 +713,9 @@ def test_run_live_loop_does_not_reprocess_same_open_time(
     def fake_run_once(**kwargs) -> dict[str, object]:
         run_once_calls.append(kwargs)
         return {
+            "decisions_count": 0,
             "latest_open_time": 2_000,
+            "risk_rejections": [],
             "submit_count": 0,
         }
 
@@ -792,7 +798,9 @@ def test_run_live_loop_reprocesses_only_newly_advanced_open_times(
         run_once_calls.append(kwargs)
         latest_open_time = kwargs["bars"].get_column("open_time").max()
         return {
+            "decisions_count": 0,
             "latest_open_time": latest_open_time,
+            "risk_rejections": [],
             "submit_count": 0,
         }
 
@@ -890,7 +898,9 @@ def test_run_live_loop_persists_new_bar_checkpoint_when_run_once_reports_stale_o
     def fake_run_once(**kwargs) -> dict[str, object]:
         run_once_calls.append(kwargs)
         return {
+            "decisions_count": 0,
             "latest_open_time": reported_open_times.pop(0),
+            "risk_rejections": [],
             "submit_count": 0,
         }
 
