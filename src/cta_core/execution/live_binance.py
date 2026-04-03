@@ -77,22 +77,30 @@ class LiveBinanceAdapter:
             break
         return streak
 
+    @staticmethod
+    def _sum_matching_positions(positions: list[dict[str, object]], symbol: str) -> tuple[Decimal, Decimal]:
+        symbol_notional = Decimal("0")
+        position_qty = Decimal("0")
+        for position in positions:
+            if position.get("symbol") != symbol:
+                continue
+            symbol_notional += abs(Decimal(str(position["notional"])))
+            position_qty += abs(Decimal(str(position["positionAmt"])))
+        return symbol_notional, position_qty
+
     def fetch_account_snapshot(self, symbol: str, now_ms: int | None = None) -> LiveAccountSnapshot:
         current_ms = now_ms if now_ms is not None else time.time_ns() // 1_000_000
+        day_start_ms = self._utc_day_start_ms(current_ms)
         account = self._signed_get("/fapi/v2/account")
         positions = self._signed_get("/fapi/v2/positionRisk")
-        trades = self._signed_get("/fapi/v1/userTrades", params={"symbol": symbol, "limit": 200})
+        trades = self._signed_get(
+            "/fapi/v1/userTrades",
+            params={"symbol": symbol, "limit": 1000, "startTime": day_start_ms},
+        )
 
         equity = Decimal(str(account["totalWalletBalance"])) + Decimal(str(account["totalUnrealizedProfit"]))
 
-        symbol_position = next((position for position in positions if position.get("symbol") == symbol), None)
-        symbol_notional = Decimal("0")
-        position_qty = Decimal("0")
-        if symbol_position is not None:
-            symbol_notional = abs(Decimal(str(symbol_position["notional"])))
-            position_qty = abs(Decimal(str(symbol_position["positionAmt"])))
-
-        day_start_ms = self._utc_day_start_ms(current_ms)
+        symbol_notional, position_qty = self._sum_matching_positions(positions, symbol)
         day_pnl = sum(
             (
                 Decimal(str(trade["realizedPnl"]))

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 import hmac
 from hashlib import sha256
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import urlencode, urlparse
 
 from cta_core.execution import live_binance
 from cta_core.execution.live_binance import LiveBinanceAdapter
@@ -31,8 +31,13 @@ def test_fetch_account_snapshot_uses_signed_endpoints(monkeypatch):
         "/fapi/v2/positionRisk": [
             {
                 "symbol": "BTCUSDT",
-                "positionAmt": "-0.25",
-                "notional": "-5000",
+                "positionAmt": "-0.10",
+                "notional": "-2000",
+            },
+            {
+                "symbol": "BTCUSDT",
+                "positionAmt": "0.15",
+                "notional": "3000",
             },
             {
                 "symbol": "ETHUSDT",
@@ -74,6 +79,10 @@ def test_fetch_account_snapshot_uses_signed_endpoints(monkeypatch):
             sha256,
         ).hexdigest()
         assert entry["params"]["signature"] == expected_signature
+
+    user_trades_request = next(entry for entry in captured if entry["url"].endswith("/fapi/v1/userTrades"))
+    assert user_trades_request["params"]["startTime"] == 1725148800000
+    assert user_trades_request["params"]["limit"] == 1000
 
     assert snapshot.equity == Decimal("1010")
     assert snapshot.symbol_notional == Decimal("5000")
