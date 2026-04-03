@@ -166,7 +166,7 @@ def run_once(
     latest_open_time = int(latest_bar.get_column("open_time").item()) if latest_bar.height > 0 else None
     latest_close = Decimal(str(latest_bar.get_column("close").item())) if latest_bar.height > 0 else None
 
-    for decision in decisions:
+    for decision_index, decision in enumerate(decisions):
         if dry_run:
             continue
         intent = decision_to_intent(
@@ -208,7 +208,11 @@ def run_once(
             continue
         submit_attempts_count += 1
         try:
-            response = adapter.submit_order(intent=intent, ts_ms=latest_open_time)
+            response = adapter.submit_order(
+                intent=intent,
+                ts_ms=latest_open_time,
+                client_tag=str(decision_index),
+            )
         except Exception as exc:
             submit_errors_count += 1
             submit_errors.append(

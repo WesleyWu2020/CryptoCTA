@@ -17,8 +17,8 @@ class DummyAdapter:
     def __init__(self) -> None:
         self.submitted: list[dict[str, object]] = []
 
-    def submit_order(self, *, intent, ts_ms: int) -> dict[str, object]:
-        record = {"intent": intent, "ts_ms": ts_ms}
+    def submit_order(self, *, intent, ts_ms: int, client_tag: str | None = None) -> dict[str, object]:
+        record = {"intent": intent, "ts_ms": ts_ms, "client_tag": client_tag}
         self.submitted.append(record)
         return record
 
@@ -392,11 +392,11 @@ def test_run_once_non_dry_records_submit_errors_and_continues() -> None:
             self.calls = 0
             self.submitted: list[dict[str, object]] = []
 
-        def submit_order(self, *, intent, ts_ms: int) -> dict[str, object]:
+        def submit_order(self, *, intent, ts_ms: int, client_tag: str | None = None) -> dict[str, object]:
             self.calls += 1
             if self.calls == 1:
                 raise RuntimeError("exchange unavailable")
-            record = {"intent": intent, "ts_ms": ts_ms}
+            record = {"intent": intent, "ts_ms": ts_ms, "client_tag": client_tag}
             self.submitted.append(record)
             return record
 
@@ -421,6 +421,33 @@ def test_run_once_non_dry_records_submit_errors_and_continues() -> None:
     assert result["submit_errors"][0]["decision_type"] == StrategyDecisionType.ENTER_LONG.value
     assert "exchange unavailable" in result["submit_errors"][0]["error"]
     assert len(adapter.submitted) == 1
+
+
+def test_run_once_non_dry_uses_deterministic_client_tags_per_decision_index() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [2_000, 3_000, 1_000],
+            "close": [12.0, 13.0, 10.0],
+        }
+    )
+    strategy = TwoEnterLongStrategy()
+    adapter = DummyAdapter()
+
+    result = live_runner.run_once(
+        strategy=strategy,
+        adapter=adapter,
+        bars=bars,
+        symbol="BTCUSDT",
+        dry_run=False,
+        equity=Decimal("1000"),
+        max_leverage=Decimal("1"),
+        risk_engine=RiskEngine(max_daily_loss=Decimal("1000"), max_symbol_notional_ratio=Decimal("2")),
+    )
+
+    assert result["submit_attempts_count"] == 2
+    assert result["submit_errors_count"] == 0
+    assert result["submit_count"] == 2
+    assert [record["client_tag"] for record in adapter.submitted] == ["0", "1"]
 
 
 def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:

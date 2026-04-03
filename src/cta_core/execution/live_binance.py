@@ -35,14 +35,22 @@ class LiveBinanceAdapter:
         *,
         strategy_id: str,
         symbol: str,
-        side: Side,
-        order_type: str,
-        quantity: Decimal,
+        side: Side | None = None,
+        order_type: str | None = None,
+        quantity: Decimal | None = None,
         ts_ms: int,
+        client_tag: str | None = None,
     ) -> str:
-        payload = (
-            f"{strategy_id}|{symbol}|{ts_ms}|{side.value}|{order_type}|{self._format_quantity(quantity)}"
-        ).encode()
+        parts = [strategy_id, symbol, str(ts_ms)]
+        if side is not None:
+            parts.append(side.value)
+        if order_type is not None:
+            parts.append(order_type)
+        if quantity is not None:
+            parts.append(self._format_quantity(quantity))
+        if client_tag is not None:
+            parts.append(str(client_tag))
+        payload = "|".join(parts).encode()
         return sha256(payload).hexdigest()[:32]
 
     def _sign_query_params(self, params: dict[str, object]) -> str:
@@ -57,6 +65,36 @@ class LiveBinanceAdapter:
     def _format_quantity(quantity: Decimal) -> str:
         formatted = format(quantity, "f").rstrip("0").rstrip(".")
         return formatted if formatted else "0"
+
+    @staticmethod
+    def _binance_error_payload(response: httpx.Response) -> dict[str, object] | None:
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @classmethod
+    def _duplicate_client_order_id_result(
+        cls,
+        *,
+        response: httpx.Response,
+        client_order_id: str,
+    ) -> dict[str, object] | None:
+        payload = cls._binance_error_payload(response)
+        if payload is None:
+            return None
+        message = str(payload.get("msg", "")).lower()
+        code = payload.get("code")
+        if code != -4111 and "client order id is not unique" not in message:
+            return None
+        return {
+            "status": "DUPLICATE_CLIENT_ORDER_ID",
+            "duplicate": True,
+            "clientOrderId": client_order_id,
+            "error_code": code,
+            "error_message": str(payload.get("msg", "")),
+        }
 
     def _signed_get(self, path: str, params: dict[str, object] | None = None) -> object:
         request_params: dict[str, object] = dict(params or {})
@@ -130,7 +168,12 @@ class LiveBinanceAdapter:
             position_qty=position_qty,
         )
 
-    def submit_order(self, intent: OrderIntent, ts_ms: int | None = None) -> dict[str, object]:
+    def submit_order(
+        self,
+        intent: OrderIntent,
+        ts_ms: int | None = None,
+        client_tag: str | None = None,
+    ) -> dict[str, object]:
         if intent.order_type != "MARKET":
             raise ValueError(f"Unsupported order_type {intent.order_type!r}; MARKET-only is supported for now")
 
@@ -142,6 +185,7 @@ class LiveBinanceAdapter:
             order_type=intent.order_type,
             quantity=intent.quantity,
             ts_ms=timestamp,
+            client_tag=client_tag,
         )
         params: dict[str, object] = {
             "symbol": intent.symbol,
@@ -159,5 +203,14 @@ class LiveBinanceAdapter:
             headers={"X-MBX-APIKEY": self.api_key},
             timeout=10.0,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            duplicate_result = self._duplicate_client_order_id_result(
+                response=response,
+                client_order_id=new_client_order_id,
+            )
+            if duplicate_result is not None:
+                return duplicate_result
+            raise
         return response.json()

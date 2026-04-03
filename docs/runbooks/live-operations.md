@@ -49,7 +49,7 @@ PYTHONPATH=src python scripts/run_live_strategy.py \
 
 5. After the first live cycle, verify:
    - The first accepted order has the expected deterministic client order identity on the exchange side.
-   - The state file `last_submit_ts_ms` matches the bar timestamp used for the first submission.
+   - The state file `last_submit_ts_ms` matches the bar timestamp used for the latest non-error live submission outcome.
    - No `live_runner alerts=` line is printed.
 
 ## Runtime Checks
@@ -77,7 +77,7 @@ cat artifacts/live_state/rp_daily_breakout.json
 
 4. Reconcile exchange state against local state:
    - `last_processed_open_time` must not move backward.
-   - `last_submit_ts_ms` must match the last accepted live submission, or be corrected before restart.
+   - `last_submit_ts_ms` must match the latest non-error live submission outcome (fresh acceptance or recognized idempotent duplicate), or be corrected before restart.
    - Any unexpected live position or order must be flattened or canceled before resuming automation.
 5. Restart in dry-run first if the exchange and local state were out of sync:
 
