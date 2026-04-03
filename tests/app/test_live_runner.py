@@ -8,7 +8,7 @@ from cta_core.app.live_config import LiveRunConfig
 from cta_core.app.live_state import LiveRuntimeState
 from cta_core.events import Side
 from cta_core.risk import RiskContext, RiskEngine
-from cta_core.strategy_runtime import StrategyDecision, StrategyDecisionType
+from cta_core.strategy_runtime import StrategyContext, StrategyDecision, StrategyDecisionType
 from cta_core.strategy_runtime.strategies import RPDailyBreakoutConfig, RPDailyBreakoutStrategy
 
 
@@ -197,6 +197,27 @@ def test_run_once_uses_full_history_context() -> None:
     assert result["decisions_count"] == 1
     assert result["submit_count"] == 0
     assert adapter.submitted == []
+
+
+def test_sync_strategy_position_state_sets_open_when_exchange_has_long() -> None:
+    strategy = RPDailyBreakoutStrategy(
+        RPDailyBreakoutConfig(rp_window=2, entry_confirmations=2, exit_confirmations=2, quantity=Decimal("1"))
+    )
+    symbol = "BTCUSDT"
+    bars = pl.DataFrame(
+        {
+            "open_time": [1_000, 2_000, 3_000],
+            "close": [10.0, 9.0, 8.0],
+        }
+    )
+
+    live_runner.sync_strategy_position_state(strategy, symbol, position_qty=Decimal("0.2"))
+
+    prepared_bars = strategy.prepare_features(bars.sort("open_time"))
+    decisions = strategy.on_bar(StrategyContext(symbol=symbol, bars=prepared_bars))
+
+    assert len(decisions) == 1
+    assert decisions[0].decision_type is StrategyDecisionType.EXIT_LONG
 
 
 def test_run_once_non_dry_submit_uses_latest_open_time() -> None:
@@ -600,6 +621,70 @@ def test_run_live_loop_dry_run_uses_local_snapshot_without_bootstrap_or_account_
     assert len(run_once_calls) == 1
     assert saved_states[-1].last_processed_open_time == 2_000
     assert saved_states[-1].last_submit_ts_ms is None
+
+
+def test_run_live_loop_does_not_reprocess_same_open_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_once_calls: list[dict[str, object]] = []
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            return None
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            return None
+
+    class FakeMarketClient:
+        pass
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        assert isinstance(client, FakeMarketClient)
+        return pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        )
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        run_once_calls.append(kwargs)
+        return {
+            "latest_open_time": 2_000,
+            "submit_count": 0,
+        }
+
+    def fake_load_live_state(path) -> LiveRuntimeState:
+        return LiveRuntimeState(last_processed_open_time=1_000)
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", fake_load_live_state)
+    monkeypatch.setattr(live_runner, "save_live_state", lambda path, state: None)
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(["--strategy", "rp_daily_breakout", "--dry-run", "--max-cycles", "2"]),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert len(run_once_calls) == 1
 
 
 @pytest.mark.parametrize("max_cycles", [0, -1])

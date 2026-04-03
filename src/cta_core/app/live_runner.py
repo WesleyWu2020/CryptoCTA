@@ -88,6 +88,13 @@ def check_risk(engine: RiskEngine, ctx: RiskContext) -> RiskResult:
     return engine.check(ctx)
 
 
+def sync_strategy_position_state(strategy: BaseStrategy, symbol: str, position_qty: Decimal) -> None:
+    is_open = position_qty > Decimal("0")
+    set_long_open = getattr(strategy, "set_long_open", None)
+    if callable(set_long_open):
+        set_long_open(symbol=symbol, is_open=is_open)
+
+
 def run_once(
     *,
     strategy: BaseStrategy,
@@ -249,6 +256,7 @@ def run_live_loop(
                     )
                 else:
                     snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
+                sync_strategy_position_state(strategy, config.symbol, snapshot.position_qty)
                 result = run_once(
                     strategy=strategy,
                     adapter=adapter,
@@ -300,5 +308,6 @@ __all__ = [
     "main",
     "run_live_loop",
     "run_once",
+    "sync_strategy_position_state",
     "validate_live_mode",
 ]
