@@ -25,14 +25,14 @@ def test_fetch_account_snapshot_uses_signed_endpoints(monkeypatch):
     captured: list[dict[str, object]] = []
     payloads = {
         "/fapi/v2/account": {
-            "totalWalletBalance": "1000.5",
-            "totalUnrealizedProfit": "12.25",
+            "totalWalletBalance": "1000",
+            "totalUnrealizedProfit": "10",
         },
         "/fapi/v2/positionRisk": [
             {
                 "symbol": "BTCUSDT",
-                "positionAmt": "-0.75",
-                "notional": "-31500.00",
+                "positionAmt": "-0.25",
+                "notional": "-5000",
             },
             {
                 "symbol": "ETHUSDT",
@@ -40,13 +40,13 @@ def test_fetch_account_snapshot_uses_signed_endpoints(monkeypatch):
                 "notional": "4500.00",
             },
         ],
-            "/fapi/v1/userTrades": [
-                {"time": 1725148803000, "realizedPnl": "-2.5"},
-                {"time": 1725148802000, "realizedPnl": "-1.0"},
-                {"time": 1725148801000, "realizedPnl": "0.25"},
-                {"time": 1725062400000, "realizedPnl": "-9.0"},
-            ],
-        }
+        "/fapi/v1/userTrades": [
+            {"time": 1725148803000, "realizedPnl": "1"},
+            {"time": 1725148802000, "realizedPnl": "-6"},
+            {"time": 1725148801000, "realizedPnl": "-8"},
+            {"time": 1725062400000, "realizedPnl": "-9.0"},
+        ],
+    }
 
     def fake_get(url, params, headers, timeout):
         captured.append({"url": url, "params": dict(params), "headers": headers, "timeout": timeout})
@@ -75,11 +75,11 @@ def test_fetch_account_snapshot_uses_signed_endpoints(monkeypatch):
         ).hexdigest()
         assert entry["params"]["signature"] == expected_signature
 
-    assert snapshot.equity == Decimal("1012.75")
-    assert snapshot.symbol_notional == Decimal("31500.00")
-    assert snapshot.position_qty == Decimal("0.75")
-    assert snapshot.day_pnl == Decimal("-3.25")
-    assert snapshot.losing_streak == 2
+    assert snapshot.equity == Decimal("1010")
+    assert snapshot.symbol_notional == Decimal("5000")
+    assert snapshot.position_qty == Decimal("0.25")
+    assert snapshot.day_pnl == Decimal("-13")
+    assert snapshot.losing_streak == 0
 
 
 def test_fetch_account_snapshot_counts_losing_streak_from_latest_trades(monkeypatch):
