@@ -301,7 +301,7 @@ def test_validate_live_mode_requires_credentials_without_dry_run() -> None:
         live_runner.validate_live_mode(dry_run=False, api_key="", api_secret="")
 
 
-def test_main_dry_run_does_not_bootstrap_live_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_dry_run_delegates_to_run_live_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[LiveRunConfig] = []
 
     def fake_run_live_loop(config: LiveRunConfig) -> int:
@@ -317,7 +317,7 @@ def test_main_dry_run_does_not_bootstrap_live_adapter(monkeypatch: pytest.Monkey
     assert calls[0].dry_run is True
 
 
-def test_main_non_dry_run_bootstraps_live_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_non_dry_run_delegates_to_run_live_loop_with_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[LiveRunConfig] = []
 
     def fake_run_live_loop(config: LiveRunConfig) -> int:
