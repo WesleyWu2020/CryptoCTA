@@ -148,6 +148,7 @@ def run_once(
 
     submitted_intents: list[dict[str, Any]] = []
     risk_rejections: list[dict[str, Any]] = []
+    submit_errors: list[dict[str, Any]] = []
     submit_attempts_count = 0
     submit_errors_count = 0
     latest_open_time = int(latest_bar.get_column("open_time").item()) if latest_bar.height > 0 else None
@@ -194,7 +195,17 @@ def run_once(
             )
             continue
         submit_attempts_count += 1
-        response = adapter.submit_order(intent=intent, ts_ms=latest_open_time)
+        try:
+            response = adapter.submit_order(intent=intent, ts_ms=latest_open_time)
+        except Exception as exc:
+            submit_errors_count += 1
+            submit_errors.append(
+                {
+                    "decision_type": decision.decision_type.value,
+                    "error": str(exc),
+                }
+            )
+            continue
         submitted_intents.append(
             {
                 "intent": intent,
@@ -212,6 +223,7 @@ def run_once(
         "submit_attempts_count": submit_attempts_count,
         "submit_errors_count": submit_errors_count,
         "submit_count": len(submitted_intents),
+        "submit_errors": submit_errors,
         "risk_rejections": risk_rejections,
         "decisions": [
             {

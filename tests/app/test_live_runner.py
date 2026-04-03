@@ -73,6 +73,33 @@ class EnterLongStrategy:
         return None
 
 
+class TwoEnterLongStrategy:
+    strategy_id = "two_enter_long"
+
+    def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+        return bars
+
+    def on_start(self, context) -> None:
+        return None
+
+    def on_bar(self, context) -> list[StrategyDecision]:
+        return [
+            StrategyDecision(
+                decision_type=StrategyDecisionType.ENTER_LONG,
+                size=Decimal("0.5"),
+                reason="first",
+            ),
+            StrategyDecision(
+                decision_type=StrategyDecisionType.ENTER_LONG,
+                size=Decimal("0.5"),
+                reason="second",
+            ),
+        ]
+
+    def on_finish(self, context) -> None:
+        return None
+
+
 def test_decision_to_intent_maps_enter_long() -> None:
     decision = StrategyDecision(decision_type=StrategyDecisionType.ENTER_LONG, size=Decimal("0.5"))
 
@@ -349,6 +376,51 @@ def test_run_once_non_dry_skips_submit_when_risk_rejects() -> None:
     assert adapter.submitted == []
     assert len(result["risk_rejections"]) == 1
     assert result["risk_rejections"][0]["rule"] == "symbol_risk_budget"
+
+
+def test_run_once_non_dry_records_submit_errors_and_continues() -> None:
+    bars = pl.DataFrame(
+        {
+            "open_time": [2_000, 3_000, 1_000],
+            "close": [12.0, 13.0, 10.0],
+        }
+    )
+    strategy = TwoEnterLongStrategy()
+
+    class FlakyAdapter:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.submitted: list[dict[str, object]] = []
+
+        def submit_order(self, *, intent, ts_ms: int) -> dict[str, object]:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("exchange unavailable")
+            record = {"intent": intent, "ts_ms": ts_ms}
+            self.submitted.append(record)
+            return record
+
+    adapter = FlakyAdapter()
+
+    result = live_runner.run_once(
+        strategy=strategy,
+        adapter=adapter,
+        bars=bars,
+        symbol="BTCUSDT",
+        dry_run=False,
+        equity=Decimal("1000"),
+        max_leverage=Decimal("1"),
+        risk_engine=RiskEngine(max_daily_loss=Decimal("1000"), max_symbol_notional_ratio=Decimal("2")),
+    )
+
+    assert result["decisions_count"] == 2
+    assert result["submit_attempts_count"] == 2
+    assert result["submit_errors_count"] == 1
+    assert result["submit_count"] == 1
+    assert len(result["submit_errors"]) == 1
+    assert result["submit_errors"][0]["decision_type"] == StrategyDecisionType.ENTER_LONG.value
+    assert "exchange unavailable" in result["submit_errors"][0]["error"]
+    assert len(adapter.submitted) == 1
 
 
 def test_check_risk_rejects_when_symbol_budget_exceeded() -> None:
@@ -1069,6 +1141,125 @@ def test_run_live_loop_emits_submit_error_alert_from_submit_counters(
 
     assert result == 0
     assert "live_runner alerts=submit_error_spike" in capsys.readouterr().out
+
+
+def test_run_live_loop_accumulates_submit_counters_across_cycles(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cycle_bars = [
+        pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        ),
+        pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        ),
+        pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000, 3_000],
+                "close_time": [1_999, 2_999, 3_999],
+                "close": [10.0, 11.0, 12.0],
+            }
+        ),
+    ]
+    compute_calls: list[dict[str, int | float]] = []
+    run_once_results = [
+        {
+            "decisions_count": 0,
+            "latest_open_time": 2_000,
+            "risk_rejections": [],
+            "submit_attempts_count": 10,
+            "submit_errors_count": 0,
+            "submit_count": 0,
+        },
+        {
+            "decisions_count": 0,
+            "latest_open_time": 3_000,
+            "risk_rejections": [],
+            "submit_attempts_count": 5,
+            "submit_errors_count": 1,
+            "submit_count": 0,
+        },
+    ]
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            return None
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            return None
+
+    class FakeMarketClient:
+        pass
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        assert isinstance(client, FakeMarketClient)
+        return cycle_bars.pop(0)
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        return run_once_results.pop(0)
+
+    def fake_load_live_state(path) -> LiveRuntimeState:
+        return LiveRuntimeState(last_processed_open_time=1_000)
+
+    def fake_compute_runtime_alerts(
+        *,
+        peak_equity: float,
+        current_equity: float,
+        submit_attempts: int,
+        submit_errors: int,
+        ws_disconnects: int,
+    ) -> list[str]:
+        compute_calls.append(
+            {
+                "submit_attempts": submit_attempts,
+                "submit_errors": submit_errors,
+            }
+        )
+        if submit_attempts == 15 and submit_errors == 1:
+            return ["submit_error_spike"]
+        return []
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", fake_load_live_state)
+    monkeypatch.setattr(live_runner, "save_live_state", lambda path, state: None)
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+    monkeypatch.setattr(live_runner, "compute_runtime_alerts", fake_compute_runtime_alerts)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(["--strategy", "rp_daily_breakout", "--dry-run", "--max-cycles", "3"]),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert compute_calls == [
+        {"submit_attempts": 10, "submit_errors": 0},
+        {"submit_attempts": 15, "submit_errors": 1},
+    ]
+    assert capsys.readouterr().out.count("live_runner alerts=submit_error_spike") == 1
 
 
 @pytest.mark.parametrize("max_cycles", [0, -1])
