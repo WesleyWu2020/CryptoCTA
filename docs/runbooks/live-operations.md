@@ -1,22 +1,88 @@
 # Live Operations Runbook
 
-## Pre-Open Checklist
+## RP Daily Breakout Launch Checklist
 
-- Confirm futures trade/read API permission scopes are limited to the minimum required trading permissions.
-- Verify risk config covers daily max loss, symbol budget, and leverage cap.
-- Confirm symbol whitelist matches deployment config.
-- Confirm clock sync and UTC timestamps.
+1. Confirm the deployment parameters before market open:
+   - Strategy: `rp_daily_breakout`
+   - Symbol: `BTCUSDT`
+   - Interval: `1h`
+   - State file: `artifacts/live_state/rp_daily_breakout.json`
+   - Risk defaults: `--max-daily-loss 500 --max-losing-streak 3 --max-symbol-notional-ratio 0.4 --max-leverage 1 --fee-bps 5`
+2. Run the dry-run launch command for at least 30 minutes and confirm there are no unexpected decisions or repeated state rewinds:
+
+```bash
+PYTHONPATH=src python scripts/run_live_strategy.py \
+  --strategy rp_daily_breakout \
+  --symbol BTCUSDT \
+  --interval 1h \
+  --state-path artifacts/live_state/rp_daily_breakout.json \
+  --dry-run
+```
+
+3. Verify the state file advances after a new closed bar is processed:
+
+```bash
+cat artifacts/live_state/rp_daily_breakout.json
+```
+
+4. Start the live runner with explicit strategy and market arguments from the plan:
+
+```bash
+PYTHONPATH=src python scripts/run_live_strategy.py \
+  --strategy rp_daily_breakout \
+  --symbol BTCUSDT \
+  --interval 1h \
+  --state-path artifacts/live_state/rp_daily_breakout.json \
+  --api-key "$BINANCE_API_KEY" \
+  --api-secret "$BINANCE_API_SECRET"
+```
+
+5. After the first live cycle, verify:
+   - The first accepted order has the expected deterministic client order identity on the exchange side.
+   - The state file `last_submit_ts_ms` matches the bar timestamp used for the first submission.
+   - No `live_runner alerts=` line is printed.
 
 ## Runtime Checks
 
-- Submit success rate is at least 97%.
-- Websocket disconnect rate stays below 3 per hour.
-- Drawdown remains under the configured threshold.
+- Investigate immediately if `live_runner alerts=` prints any of:
+  - `drawdown_breach`
+  - `submit_error_spike`
+  - `ws_instability`
+- Treat the runtime as healthy only when all of the following remain true:
+  - Drawdown is below `8%`
+  - Submit error rate is below `3%`
+  - Websocket disconnect count is below `3`
 
-## Incident Response
+## Incident Rollback Checklist
 
-1. Trigger kill-switch (reduce-only mode).
-2. Snapshot open positions and open orders.
-3. Reconcile with exchange positions.
-4. Restart live runner in recovery mode.
-5. Resume only after metrics normalize.
+1. Stop the live runner process and prevent further submissions.
+2. Snapshot the current exchange state:
+   - Open positions
+   - Open orders
+   - Most recent accepted order timestamp
+3. Snapshot the local recovery state file before any restart:
+
+```bash
+cat artifacts/live_state/rp_daily_breakout.json
+```
+
+4. Reconcile exchange state against local state:
+   - `last_processed_open_time` must not move backward.
+   - `last_submit_ts_ms` must match the last accepted live submission, or be corrected before restart.
+   - Any unexpected live position or order must be flattened or canceled before resuming automation.
+5. Restart in dry-run first if the exchange and local state were out of sync:
+
+```bash
+PYTHONPATH=src python scripts/run_live_strategy.py \
+  --strategy rp_daily_breakout \
+  --symbol BTCUSDT \
+  --interval 1h \
+  --state-path artifacts/live_state/rp_daily_breakout.json \
+  --dry-run
+```
+
+6. Resume live trading only when all rollback clear conditions are met:
+   - Exchange positions and open orders match the intended strategy state.
+   - The state file reflects the reconciled `last_processed_open_time` and `last_submit_ts_ms`.
+   - `live_runner alerts=` is no longer emitted.
+   - Alert thresholds have cleared: drawdown below `8%`, submit error rate below `3%`, websocket disconnects below `3`.

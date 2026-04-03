@@ -14,6 +14,7 @@ from cta_core.app.live_state import LiveRuntimeState, load_live_state, save_live
 from cta_core.data.binance_client import BinanceUMClient
 from cta_core.events import OrderIntent, Side
 from cta_core.execution.live_binance import LiveBinanceAdapter
+from cta_core.ops.monitoring import evaluate_alerts
 from cta_core.risk import RiskContext, RiskEngine, RiskResult
 from cta_core.strategy_runtime import BaseStrategy, StrategyContext, StrategyDecision, StrategyDecisionType
 from cta_core.strategy_runtime.registry import build_strategy
@@ -93,6 +94,23 @@ def sync_strategy_position_state(strategy: BaseStrategy, symbol: str, position_q
     set_long_open = getattr(strategy, "set_long_open", None)
     if callable(set_long_open):
         set_long_open(symbol=symbol, is_open=is_open)
+
+
+def compute_runtime_alerts(
+    *,
+    peak_equity: float,
+    current_equity: float,
+    submit_attempts: int,
+    submit_errors: int,
+    ws_disconnects: int,
+) -> list[str]:
+    drawdown_pct = 0.0 if peak_equity <= 0 else max(0.0, (peak_equity - current_equity) / peak_equity)
+    submit_error_rate = 0.0 if submit_attempts <= 0 else submit_errors / submit_attempts
+    return evaluate_alerts(
+        drawdown_pct=drawdown_pct,
+        submit_error_rate=submit_error_rate,
+        ws_disconnects=ws_disconnects,
+    )
 
 
 def run_once(
@@ -227,6 +245,10 @@ def run_live_loop(
     cycles = 0
     started = False
     last_context: StrategyContext | None = None
+    submit_attempts = 0
+    submit_errors = 0
+    peak_equity = 0.0
+    ws_disconnects = 0
 
     try:
         while True:
@@ -256,6 +278,7 @@ def run_live_loop(
                     )
                 else:
                     snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
+                peak_equity = max(peak_equity, float(snapshot.equity))
                 sync_strategy_position_state(strategy, config.symbol, snapshot.position_qty)
                 result = run_once(
                     strategy=strategy,
@@ -272,6 +295,17 @@ def run_live_loop(
                     losing_streak=snapshot.losing_streak,
                     symbol_notional=snapshot.symbol_notional,
                 )
+                submit_attempts += int(result.get("decisions_count", 0))
+                submit_errors += len(result.get("risk_rejections", []))
+                alerts = compute_runtime_alerts(
+                    peak_equity=peak_equity,
+                    current_equity=float(snapshot.equity),
+                    submit_attempts=submit_attempts,
+                    submit_errors=submit_errors,
+                    ws_disconnects=ws_disconnects,
+                )
+                if alerts:
+                    print(f"live_runner alerts={','.join(alerts)}")
 
                 max_new_open_time = int(new_bars.get_column("open_time").max())
                 latest_open_time = result.get("latest_open_time")
@@ -310,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
 __all__ = [
     "bootstrap_live_runner",
     "check_risk",
+    "compute_runtime_alerts",
     "decision_to_intent",
     "main",
     "run_live_loop",

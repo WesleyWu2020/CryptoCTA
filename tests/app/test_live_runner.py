@@ -5,6 +5,7 @@ import polars as pl
 
 from cta_core.app import live_runner
 from cta_core.app.live_config import LiveRunConfig
+from cta_core.app.live_runner import compute_runtime_alerts
 from cta_core.app.live_state import LiveRuntimeState
 from cta_core.events import Side
 from cta_core.risk import RiskContext, RiskEngine
@@ -157,6 +158,19 @@ def test_decision_to_intent_returns_none_for_unsupported_decision_type() -> None
     intent = live_runner.decision_to_intent("rp_daily_breakout", "BTCUSDT", decision)
 
     assert intent is None
+
+
+def test_compute_runtime_alerts_raises_submit_error_alert() -> None:
+    alerts = compute_runtime_alerts(
+        peak_equity=1000.0,
+        current_equity=920.0,
+        submit_attempts=100,
+        submit_errors=5,
+        ws_disconnects=0,
+    )
+
+    assert "submit_error_spike" in alerts
+    assert "drawdown_breach" in alerts
 
 
 def test_run_once_dry_run_does_not_submit() -> None:
