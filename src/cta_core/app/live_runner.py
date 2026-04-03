@@ -273,14 +273,20 @@ def run_live_loop(
                     symbol_notional=snapshot.symbol_notional,
                 )
 
+                max_new_open_time = int(new_bars.get_column("open_time").max())
                 latest_open_time = result.get("latest_open_time")
                 if latest_open_time is None:
-                    latest_open_time = int(new_bars.get_column("open_time").max())
+                    latest_open_time = max_new_open_time
+                latest_open_time = max(
+                    int(state.last_processed_open_time or 0),
+                    int(latest_open_time),
+                    max_new_open_time,
+                )
                 last_submit_ts_ms = state.last_submit_ts_ms
                 if int(result.get("submit_count", 0)) > 0:
                     last_submit_ts_ms = int(latest_open_time)
                 state = LiveRuntimeState(
-                    last_processed_open_time=int(latest_open_time),
+                    last_processed_open_time=latest_open_time,
                     last_submit_ts_ms=last_submit_ts_ms,
                 )
                 save_live_state(state_path, state)
