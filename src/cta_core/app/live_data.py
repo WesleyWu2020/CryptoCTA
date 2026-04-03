@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import time
 from typing import Any
 
 import polars as pl
 
 from cta_core.data.ingest import normalize_klines
+
+
+def _empty_normalized_frame(symbol: str, interval: str) -> pl.DataFrame:
+    return normalize_klines(symbol=symbol, interval=interval, rows=[])
 
 
 def fetch_closed_bars(
@@ -15,18 +19,23 @@ def fetch_closed_bars(
     lookback_bars: int,
     now_ms: int | None = None,
 ) -> pl.DataFrame:
+    if lookback_bars <= 0:
+        raise ValueError("lookback_bars must be > 0")
+
     rows = client.fetch_klines(
         symbol=symbol,
         interval=interval,
         limit=max(lookback_bars + 2, 10),
     )
     if not rows:
-        return normalize_klines(symbol=symbol, interval=interval, rows=[])
+        return _empty_normalized_frame(symbol, interval)
 
-    bars = normalize_klines(symbol=symbol, interval=interval, rows=rows).sort("open_time")
-    cutoff_ms = now_ms
-    if cutoff_ms is None:
-        cutoff_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    try:
+        bars = normalize_klines(symbol=symbol, interval=interval, rows=rows).sort("open_time")
+    except Exception:
+        return _empty_normalized_frame(symbol, interval)
+
+    cutoff_ms = now_ms if now_ms is not None else time.time_ns() // 1_000_000
     closed = bars.filter(pl.col("close_time") <= cutoff_ms)
     return closed.tail(lookback_bars)
 

@@ -1,6 +1,8 @@
 import polars as pl
+import pytest
 
 from cta_core.app import live_data
+from cta_core.data.ingest import normalize_klines
 
 
 class FakeClient:
@@ -51,6 +53,51 @@ def test_fetch_closed_bars_filters_out_unclosed_latest_bar() -> None:
     assert bars.height == 2
     assert "close" in bars.columns
     assert "close_time" in bars.columns
+
+
+def test_fetch_closed_bars_rejects_non_positive_lookback() -> None:
+    client = FakeClient(rows=[])
+
+    with pytest.raises(ValueError, match="lookback_bars must be > 0"):
+        live_data.fetch_closed_bars(
+            client=client,
+            symbol="BTCUSDT",
+            interval="1m",
+            lookback_bars=0,
+            now_ms=3500,
+        )
+
+
+def test_fetch_closed_bars_returns_empty_frame_for_malformed_rows() -> None:
+    client = FakeClient(rows=[[1000, "10"]])
+
+    bars = live_data.fetch_closed_bars(
+        client=client,
+        symbol="BTCUSDT",
+        interval="1m",
+        lookback_bars=10,
+        now_ms=3500,
+    )
+
+    expected = normalize_klines(symbol="BTCUSDT", interval="1m", rows=[])
+    assert bars.height == 0
+    assert bars.columns == expected.columns
+
+
+def test_fetch_closed_bars_returns_empty_frame_for_empty_rows() -> None:
+    client = FakeClient(rows=[])
+
+    bars = live_data.fetch_closed_bars(
+        client=client,
+        symbol="BTCUSDT",
+        interval="1m",
+        lookback_bars=10,
+        now_ms=3500,
+    )
+
+    expected = normalize_klines(symbol="BTCUSDT", interval="1m", rows=[])
+    assert bars.height == 0
+    assert bars.columns == expected.columns
 
 
 def test_select_new_closed_bars_returns_only_bars_after_checkpoint() -> None:
