@@ -148,6 +148,8 @@ def run_once(
 
     submitted_intents: list[dict[str, Any]] = []
     risk_rejections: list[dict[str, Any]] = []
+    submit_attempts_count = 0
+    submit_errors_count = 0
     latest_open_time = int(latest_bar.get_column("open_time").item()) if latest_bar.height > 0 else None
     latest_close = Decimal(str(latest_bar.get_column("close").item())) if latest_bar.height > 0 else None
 
@@ -191,6 +193,7 @@ def run_once(
                 }
             )
             continue
+        submit_attempts_count += 1
         response = adapter.submit_order(intent=intent, ts_ms=latest_open_time)
         submitted_intents.append(
             {
@@ -206,6 +209,8 @@ def run_once(
         "dry_run": dry_run,
         "latest_open_time": latest_open_time,
         "decisions_count": len(decisions),
+        "submit_attempts_count": submit_attempts_count,
+        "submit_errors_count": submit_errors_count,
         "submit_count": len(submitted_intents),
         "risk_rejections": risk_rejections,
         "decisions": [
@@ -295,8 +300,8 @@ def run_live_loop(
                     losing_streak=snapshot.losing_streak,
                     symbol_notional=snapshot.symbol_notional,
                 )
-                submit_attempts += int(result["decisions_count"])
-                submit_errors += len(result["risk_rejections"])
+                submit_attempts += int(result.get("submit_attempts_count", result.get("submit_count", 0)))
+                submit_errors += int(result.get("submit_errors_count", 0))
                 alerts = compute_runtime_alerts(
                     peak_equity=peak_equity,
                     current_equity=float(snapshot.equity),

@@ -55,11 +55,10 @@ PYTHONPATH=src python scripts/run_live_strategy.py \
 - Investigate immediately if `live_runner alerts=` prints any of:
   - `drawdown_breach`
   - `submit_error_spike`
-  - `ws_instability`
 - Treat the runtime as healthy only when all of the following remain true:
   - Drawdown is below `8%`
   - Submit error rate is below `3%`
-  - Websocket disconnect count is below `3`
+- `ws_instability` is reserved for websocket-backed runners. This REST polling loop does not currently increment `ws_disconnects`, so that alert is not expected to fire from `scripts/run_live_strategy.py` today.
 
 ## Incident Rollback Checklist
 
@@ -93,4 +92,5 @@ PYTHONPATH=src python scripts/run_live_strategy.py \
    - Exchange positions and open orders match the intended strategy state.
    - The state file reflects the reconciled `last_processed_open_time` and `last_submit_ts_ms`.
    - `live_runner alerts=` is no longer emitted.
-   - Alert thresholds have cleared: drawdown below `8%`, submit error rate below `3%`, websocket disconnects below `3`.
+   - Alert thresholds have cleared: drawdown below `8%` and submit error rate below `3%`.
+   - If a websocket disconnect counter is added in a future runner revision, verify `ws_disconnects` is below `3` before treating `ws_instability` as cleared.
