@@ -1081,6 +1081,184 @@ def test_run_live_loop_does_not_advance_checkpoint_when_submit_errors_occur(
     assert saved_states[-1] == LiveRuntimeState(last_processed_open_time=2_000, last_submit_ts_ms=2_000)
 
 
+def test_run_live_loop_continues_after_market_fetch_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_once_calls: list[dict[str, object]] = []
+    fetch_calls = 0
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            return None
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            return None
+
+    class FakeMarketClient:
+        pass
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        nonlocal fetch_calls
+        assert isinstance(client, FakeMarketClient)
+        fetch_calls += 1
+        if fetch_calls == 1:
+            raise RuntimeError("klines timeout")
+        return pl.DataFrame(
+            {
+                "open_time": [1_000],
+                "close_time": [1_999],
+                "close": [10.0],
+            }
+        )
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        run_once_calls.append(kwargs)
+        return {
+            "decisions_count": 0,
+            "latest_open_time": 1_000,
+            "risk_rejections": [],
+            "submit_count": 0,
+        }
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", lambda path: LiveRuntimeState())
+    monkeypatch.setattr(live_runner, "save_live_state", lambda path, state: None)
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(["--strategy", "rp_daily_breakout", "--dry-run", "--max-cycles", "2"]),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert fetch_calls == 2
+    assert len(run_once_calls) == 1
+    assert "live_runner cycle_warn stage=market_fetch error=klines timeout" in capsys.readouterr().out
+
+
+def test_run_live_loop_continues_after_account_snapshot_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_once_calls: list[dict[str, object]] = []
+    saved_states: list[LiveRuntimeState] = []
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            return None
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            return None
+
+    class FakeAdapter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def fetch_account_snapshot(self, symbol: str, now_ms: int) -> object:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("account endpoint unavailable")
+            return type(
+                "Snapshot",
+                (),
+                {
+                    "position_qty": Decimal("0"),
+                    "equity": Decimal("1000"),
+                    "day_pnl": Decimal("0"),
+                    "losing_streak": 0,
+                    "symbol_notional": Decimal("0"),
+                },
+            )()
+
+    class FakeMarketClient:
+        pass
+
+    adapter = FakeAdapter()
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return FakeStrategy()
+
+    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> FakeAdapter:
+        assert api_key == "key"
+        assert api_secret == "secret"
+        return adapter
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        assert isinstance(client, FakeMarketClient)
+        return pl.DataFrame(
+            {
+                "open_time": [1_000],
+                "close_time": [1_999],
+                "close": [10.0],
+            }
+        )
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        run_once_calls.append(kwargs)
+        return {
+            "decisions_count": 0,
+            "latest_open_time": 1_000,
+            "risk_rejections": [],
+            "submit_count": 0,
+        }
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", lambda path: LiveRuntimeState())
+    monkeypatch.setattr(live_runner, "save_live_state", lambda path, state: saved_states.append(state))
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(
+            [
+                "--strategy",
+                "rp_daily_breakout",
+                "--api-key",
+                "key",
+                "--api-secret",
+                "secret",
+                "--max-cycles",
+                "2",
+            ]
+        ),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert adapter.calls == 2
+    assert len(run_once_calls) == 1
+    assert saved_states[-1].last_processed_open_time == 1_000
+    assert "live_runner cycle_warn stage=account_snapshot error=account endpoint unavailable" in capsys.readouterr().out
+
+
 def test_run_live_loop_does_not_raise_submit_error_alert_from_risk_rejections(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1190,6 +1368,12 @@ def test_run_live_loop_emits_submit_error_alert_from_submit_counters(
             "risk_rejections": [],
             "submit_attempts_count": 100,
             "submit_errors_count": 5,
+            "submit_errors": [
+                {
+                    "decision_type": StrategyDecisionType.ENTER_LONG.value,
+                    "error": "exchange unavailable",
+                }
+            ],
             "submit_count": 0,
         }
 
@@ -1210,7 +1394,9 @@ def test_run_live_loop_emits_submit_error_alert_from_submit_counters(
     )
 
     assert result == 0
-    assert "live_runner alerts=submit_error_spike" in capsys.readouterr().out
+    captured = capsys.readouterr().out
+    assert "live_runner alerts=submit_error_spike" in captured
+    assert "ENTER_LONG:exchange unavailable" in captured
 
 
 def test_run_live_loop_accumulates_submit_counters_across_cycles(

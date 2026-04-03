@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 import httpx
 
 from cta_core.events.models import OrderIntent
+from cta_core.events import Side
 
 
 @dataclass(frozen=True)
@@ -29,8 +30,19 @@ class LiveBinanceAdapter:
         self.api_key = api_key
         self.api_secret = api_secret
 
-    def client_order_id(self, *, strategy_id: str, symbol: str, ts_ms: int) -> str:
-        payload = f"{strategy_id}|{symbol}|{ts_ms}".encode()
+    def client_order_id(
+        self,
+        *,
+        strategy_id: str,
+        symbol: str,
+        side: Side,
+        order_type: str,
+        quantity: Decimal,
+        ts_ms: int,
+    ) -> str:
+        payload = (
+            f"{strategy_id}|{symbol}|{ts_ms}|{side.value}|{order_type}|{self._format_quantity(quantity)}"
+        ).encode()
         return sha256(payload).hexdigest()[:32]
 
     def _sign_query_params(self, params: dict[str, object]) -> str:
@@ -126,6 +138,9 @@ class LiveBinanceAdapter:
         new_client_order_id = self.client_order_id(
             strategy_id=intent.strategy_id,
             symbol=intent.symbol,
+            side=intent.side,
+            order_type=intent.order_type,
+            quantity=intent.quantity,
             ts_ms=timestamp,
         )
         params: dict[str, object] = {

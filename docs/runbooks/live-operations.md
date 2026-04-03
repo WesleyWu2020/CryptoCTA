@@ -20,6 +20,7 @@ PYTHONPATH=src python scripts/run_live_strategy.py \
   --max-losing-streak 3 \
   --max-symbol-notional-ratio 0.4 \
   --max-leverage 1 \
+  --fee-bps 5 \
   --dry-run
 ```
 
@@ -41,6 +42,7 @@ PYTHONPATH=src python scripts/run_live_strategy.py \
   --max-losing-streak 3 \
   --max-symbol-notional-ratio 0.4 \
   --max-leverage 1 \
+  --fee-bps 5 \
   --api-key "$BINANCE_API_KEY" \
   --api-secret "$BINANCE_API_SECRET"
 ```
@@ -85,6 +87,7 @@ PYTHONPATH=src python scripts/run_live_strategy.py \
   --symbol BTCUSDT \
   --interval 1h \
   --state-path artifacts/live_state/rp_daily_breakout.json \
+  --fee-bps 5 \
   --dry-run
 ```
 

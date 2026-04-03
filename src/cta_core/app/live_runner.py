@@ -113,6 +113,18 @@ def compute_runtime_alerts(
     )
 
 
+def format_submit_error_details(submit_errors: list[dict[str, Any]], limit: int = 3) -> str:
+    details: list[str] = []
+    for error in submit_errors[:limit]:
+        decision_type = str(error.get("decision_type", "unknown"))
+        message = " ".join(str(error.get("error", "unknown")).split())
+        details.append(f"{decision_type}:{message}")
+    remaining = len(submit_errors) - len(details)
+    if remaining > 0:
+        details.append(f"+{remaining} more")
+    return ",".join(details)
+
+
 def run_once(
     *,
     strategy: BaseStrategy,
@@ -270,13 +282,21 @@ def run_live_loop(
     try:
         while True:
             now_ms = now_ms_fn()
-            bars = fetch_closed_bars(
-                client=market_client,
-                symbol=config.symbol,
-                interval=config.interval,
-                lookback_bars=config.lookback_bars,
-                now_ms=now_ms,
-            )
+            try:
+                bars = fetch_closed_bars(
+                    client=market_client,
+                    symbol=config.symbol,
+                    interval=config.interval,
+                    lookback_bars=config.lookback_bars,
+                    now_ms=now_ms,
+                )
+            except Exception as exc:
+                print(f"live_runner cycle_warn stage=market_fetch error={exc}")
+                cycles += 1
+                if config.max_cycles is not None and cycles >= config.max_cycles:
+                    break
+                sleep_fn(config.poll_seconds)
+                continue
             new_bars = select_new_closed_bars(bars, state.last_processed_open_time)
 
             if new_bars.height > 0:
@@ -294,7 +314,15 @@ def run_live_loop(
                         symbol_notional=Decimal("0"),
                     )
                 else:
-                    snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
+                    try:
+                        snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
+                    except Exception as exc:
+                        print(f"live_runner cycle_warn stage=account_snapshot error={exc}")
+                        cycles += 1
+                        if config.max_cycles is not None and cycles >= config.max_cycles:
+                            break
+                        sleep_fn(config.poll_seconds)
+                        continue
                 peak_equity = max(peak_equity, float(snapshot.equity))
                 sync_strategy_position_state(strategy, config.symbol, snapshot.position_qty)
                 result = run_once(
@@ -321,8 +349,12 @@ def run_live_loop(
                     submit_errors=submit_errors,
                     ws_disconnects=ws_disconnects,
                 )
+                submit_error_details = format_submit_error_details(result.get("submit_errors", []))
                 if alerts:
-                    print(f"live_runner alerts={','.join(alerts)}")
+                    suffix = f" details={submit_error_details}" if submit_error_details else ""
+                    print(f"live_runner alerts={','.join(alerts)}{suffix}")
+                elif submit_error_details:
+                    print(f"live_runner submit_errors={submit_error_details}")
 
                 if int(result.get("submit_errors_count", 0)) > 0:
                     state = LiveRuntimeState(
@@ -369,6 +401,7 @@ __all__ = [
     "check_risk",
     "compute_runtime_alerts",
     "decision_to_intent",
+    "format_submit_error_details",
     "main",
     "run_live_loop",
     "run_once",
