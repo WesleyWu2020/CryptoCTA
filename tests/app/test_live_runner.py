@@ -5,6 +5,7 @@ import polars as pl
 
 from cta_core.app import live_runner
 from cta_core.app.live_config import LiveRunConfig
+from cta_core.app.live_state import LiveRuntimeState
 from cta_core.events import Side
 from cta_core.risk import RiskContext, RiskEngine
 from cta_core.strategy_runtime import StrategyDecision, StrategyDecisionType
@@ -301,37 +302,29 @@ def test_validate_live_mode_requires_credentials_without_dry_run() -> None:
 
 
 def test_main_dry_run_does_not_bootstrap_live_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = False
+    calls: list[LiveRunConfig] = []
 
-    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> object:
-        nonlocal called
-        called = True
-        raise AssertionError("bootstrap_live_runner should not be called in dry-run mode")
+    def fake_run_live_loop(config: LiveRunConfig) -> int:
+        calls.append(config)
+        return 0
 
-    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+    monkeypatch.setattr(live_runner, "run_live_loop", fake_run_live_loop)
 
     result = live_runner.main(["--strategy", "rp_daily_breakout", "--dry-run"])
 
     assert result == 0
-    assert called is False
+    assert len(calls) == 1
+    assert calls[0].dry_run is True
 
 
 def test_main_non_dry_run_bootstraps_live_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, str]] = []
+    calls: list[LiveRunConfig] = []
 
-    class FakeStrategy:
-        strategy_id = "rp_daily_breakout"
+    def fake_run_live_loop(config: LiveRunConfig) -> int:
+        calls.append(config)
+        return 0
 
-    def fake_build_strategy(strategy_id: str) -> object:
-        assert strategy_id == "rp_daily_breakout"
-        return FakeStrategy()
-
-    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> object:
-        calls.append((api_key, api_secret))
-        return object()
-
-    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
-    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+    monkeypatch.setattr(live_runner, "run_live_loop", fake_run_live_loop)
 
     result = live_runner.main(
         [
@@ -345,7 +338,9 @@ def test_main_non_dry_run_bootstraps_live_adapter(monkeypatch: pytest.MonkeyPatc
     )
 
     assert result == 0
-    assert calls == [("key", "secret")]
+    assert len(calls) == 1
+    assert calls[0].api_key == "key"
+    assert calls[0].api_secret == "secret"
 
 
 def test_live_run_config_from_args() -> None:
@@ -361,6 +356,20 @@ def test_live_run_config_from_args() -> None:
             "300",
             "--poll-seconds",
             "2",
+            "--state-path",
+            "artifacts/live_state/custom.json",
+            "--max-daily-loss",
+            "750",
+            "--max-losing-streak",
+            "4",
+            "--max-symbol-notional-ratio",
+            "0.6",
+            "--max-leverage",
+            "2",
+            "--fee-bps",
+            "7",
+            "--max-cycles",
+            "5",
             "--dry-run",
         ]
     )
@@ -370,4 +379,131 @@ def test_live_run_config_from_args() -> None:
     assert config.interval == "1h"
     assert config.lookback_bars == 300
     assert config.poll_seconds == 2
+    assert config.state_path == "artifacts/live_state/custom.json"
+    assert config.max_daily_loss == Decimal("750")
+    assert config.max_losing_streak == 4
+    assert config.max_symbol_notional_ratio == Decimal("0.6")
+    assert config.max_leverage == Decimal("2")
+    assert config.fee_bps == Decimal("7")
+    assert config.max_cycles == 5
     assert config.dry_run is True
+
+
+def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_once_calls: list[dict[str, object]] = []
+    saved_states: list[LiveRuntimeState] = []
+
+    class FakeStrategy:
+        strategy_id = "rp_daily_breakout"
+        started = False
+        finished = False
+
+        def prepare_features(self, bars: pl.DataFrame, bars_htf: pl.DataFrame | None = None) -> pl.DataFrame:
+            return bars
+
+        def on_start(self, context) -> None:
+            self.started = True
+
+        def on_bar(self, context) -> list[StrategyDecision]:
+            return []
+
+        def on_finish(self, context) -> None:
+            self.finished = True
+
+    class FakeAdapter:
+        def fetch_account_snapshot(self, symbol: str, now_ms: int) -> object:
+            assert symbol == "BTCUSDT"
+            assert now_ms == 3_100
+            return type(
+                "Snapshot",
+                (),
+                {
+                    "position_qty": Decimal("0"),
+                    "equity": Decimal("1000"),
+                    "day_pnl": Decimal("0"),
+                    "losing_streak": 0,
+                    "symbol_notional": Decimal("0"),
+                },
+            )()
+
+    class FakeMarketClient:
+        pass
+
+    strategy = FakeStrategy()
+
+    def fake_build_strategy(strategy_id: str) -> FakeStrategy:
+        assert strategy_id == "rp_daily_breakout"
+        return strategy
+
+    def fake_bootstrap_live_runner(*, api_key: str, api_secret: str) -> FakeAdapter:
+        assert api_key == ""
+        assert api_secret == ""
+        return FakeAdapter()
+
+    def fake_fetch_closed_bars(*, client, symbol: str, interval: str, lookback_bars: int, now_ms: int) -> pl.DataFrame:
+        assert isinstance(client, FakeMarketClient)
+        assert symbol == "BTCUSDT"
+        assert interval == "1h"
+        assert lookback_bars == 300
+        assert now_ms == 3_100
+        return pl.DataFrame(
+            {
+                "open_time": [1_000, 2_000],
+                "close_time": [1_999, 2_999],
+                "close": [10.0, 11.0],
+            }
+        )
+
+    def fake_run_once(**kwargs) -> dict[str, object]:
+        run_once_calls.append(kwargs)
+        bars = kwargs["bars"]
+        assert isinstance(bars, pl.DataFrame)
+        assert bars.get_column("open_time").to_list() == [1_000, 2_000]
+        return {
+            "latest_open_time": 2_000,
+            "submit_count": 1,
+        }
+
+    def fake_load_live_state(path) -> LiveRuntimeState:
+        return LiveRuntimeState(last_processed_open_time=1_000)
+
+    def fake_save_live_state(path, state: LiveRuntimeState) -> None:
+        saved_states.append(state)
+
+    monkeypatch.setattr(live_runner, "build_strategy", fake_build_strategy)
+    monkeypatch.setattr(live_runner, "bootstrap_live_runner", fake_bootstrap_live_runner)
+    monkeypatch.setattr(live_runner, "fetch_closed_bars", fake_fetch_closed_bars)
+    monkeypatch.setattr(live_runner, "run_once", fake_run_once)
+    monkeypatch.setattr(live_runner, "load_live_state", fake_load_live_state)
+    monkeypatch.setattr(live_runner, "save_live_state", fake_save_live_state)
+    monkeypatch.setattr(live_runner, "BinanceUMClient", FakeMarketClient)
+
+    result = live_runner.run_live_loop(
+        LiveRunConfig.from_argv(["--strategy", "rp_daily_breakout", "--dry-run", "--max-cycles", "1"]),
+        sleep_fn=lambda _seconds: None,
+        now_ms_fn=lambda: 3_100,
+    )
+
+    assert result == 0
+    assert len(run_once_calls) == 1
+    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [1_000, 2_000]
+    assert saved_states[-1].last_processed_open_time == 2_000
+    assert saved_states[-1].last_submit_ts_ms == 2_000
+    assert strategy.started is True
+    assert strategy.finished is True
+
+
+def test_main_runs_live_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[LiveRunConfig] = []
+
+    def fake_run_live_loop(config: LiveRunConfig) -> int:
+        calls.append(config)
+        return 0
+
+    monkeypatch.setattr(live_runner, "run_live_loop", fake_run_live_loop)
+
+    result = live_runner.main(["--strategy", "rp_daily_breakout", "--dry-run", "--max-cycles", "1"])
+
+    assert result == 0
+    assert len(calls) == 1
+    assert calls[0].max_cycles == 1

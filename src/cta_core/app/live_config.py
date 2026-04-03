@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from decimal import Decimal
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,13 @@ class LiveRunConfig:
     dry_run: bool
     api_key: str
     api_secret: str
+    state_path: str
+    max_daily_loss: Decimal
+    max_losing_streak: int
+    max_symbol_notional_ratio: Decimal
+    max_leverage: Decimal
+    fee_bps: Decimal
+    max_cycles: int | None
 
     @classmethod
     def build_parser(cls) -> argparse.ArgumentParser:
@@ -26,6 +34,13 @@ class LiveRunConfig:
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--api-key", default="")
         parser.add_argument("--api-secret", default="")
+        parser.add_argument("--state-path", default="artifacts/live_state/rp_daily_breakout.json")
+        parser.add_argument("--max-daily-loss", type=Decimal, default=Decimal("500"))
+        parser.add_argument("--max-losing-streak", type=int, default=3)
+        parser.add_argument("--max-symbol-notional-ratio", type=Decimal, default=Decimal("0.4"))
+        parser.add_argument("--max-leverage", type=Decimal, default=Decimal("1"))
+        parser.add_argument("--fee-bps", type=Decimal, default=Decimal("5"))
+        parser.add_argument("--max-cycles", type=int, default=None)
         return parser
 
     @classmethod
@@ -40,6 +55,13 @@ class LiveRunConfig:
             dry_run=args.dry_run,
             api_key=args.api_key,
             api_secret=args.api_secret,
+            state_path=args.state_path,
+            max_daily_loss=args.max_daily_loss,
+            max_losing_streak=args.max_losing_streak,
+            max_symbol_notional_ratio=args.max_symbol_notional_ratio,
+            max_leverage=args.max_leverage,
+            fee_bps=args.fee_bps,
+            max_cycles=args.max_cycles,
         )
 
 

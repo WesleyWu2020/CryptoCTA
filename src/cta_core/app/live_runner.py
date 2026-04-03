@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import time
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import polars as pl
 
+from cta_core.app.live_config import LiveRunConfig
+from cta_core.app.live_data import fetch_closed_bars, select_new_closed_bars
+from cta_core.app.live_state import LiveRuntimeState, load_live_state, save_live_state
+from cta_core.data.binance_client import BinanceUMClient
 from cta_core.events import OrderIntent, Side
 from cta_core.execution.live_binance import LiveBinanceAdapter
-from cta_core.app.live_config import LiveRunConfig
 from cta_core.risk import RiskContext, RiskEngine, RiskResult
 from cta_core.strategy_runtime import BaseStrategy, StrategyContext, StrategyDecision, StrategyDecisionType
 from cta_core.strategy_runtime.registry import build_strategy
@@ -189,14 +194,88 @@ def run_once(
     }
 
 
-def main(argv: list[str] | None = None) -> int:
-    config = LiveRunConfig.from_argv(argv)
+def run_live_loop(
+    config: LiveRunConfig,
+    sleep_fn=time.sleep,
+    now_ms_fn=lambda: time.time_ns() // 1_000_000,
+) -> int:
     validate_live_mode(dry_run=config.dry_run, api_key=config.api_key, api_secret=config.api_secret)
     strategy = build_strategy(config.strategy_id)
-    if not config.dry_run:
-        bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
-    print(f"live_runner startup strategy={strategy.strategy_id} symbol={config.symbol} dry_run={config.dry_run}")
+    adapter = bootstrap_live_runner(api_key=config.api_key, api_secret=config.api_secret)
+    risk_engine = RiskEngine(
+        max_daily_loss=config.max_daily_loss,
+        max_losing_streak=config.max_losing_streak,
+        max_symbol_notional_ratio=config.max_symbol_notional_ratio,
+    )
+    state_path = Path(config.state_path)
+    state = load_live_state(state_path)
+    market_client = BinanceUMClient()
+
+    cycles = 0
+    started = False
+    last_context: StrategyContext | None = None
+
+    try:
+        while True:
+            now_ms = now_ms_fn()
+            bars = fetch_closed_bars(
+                client=market_client,
+                symbol=config.symbol,
+                interval=config.interval,
+                lookback_bars=config.lookback_bars,
+                now_ms=now_ms,
+            )
+            new_bars = select_new_closed_bars(bars, state.last_processed_open_time)
+
+            if new_bars.height > 0:
+                last_context = StrategyContext(symbol=config.symbol, bars=bars)
+                if not started:
+                    strategy.on_start(last_context)
+                    started = True
+
+                snapshot = adapter.fetch_account_snapshot(symbol=config.symbol, now_ms=now_ms)
+                result = run_once(
+                    strategy=strategy,
+                    adapter=adapter,
+                    bars=bars,
+                    symbol=config.symbol,
+                    dry_run=config.dry_run,
+                    position_qty=snapshot.position_qty,
+                    equity=snapshot.equity,
+                    max_leverage=config.max_leverage,
+                    fee_bps=config.fee_bps,
+                    risk_engine=risk_engine,
+                    day_pnl=snapshot.day_pnl,
+                    losing_streak=snapshot.losing_streak,
+                    symbol_notional=snapshot.symbol_notional,
+                )
+
+                latest_open_time = result.get("latest_open_time")
+                if latest_open_time is None:
+                    latest_open_time = int(new_bars.get_column("open_time").max())
+                last_submit_ts_ms = state.last_submit_ts_ms
+                if int(result.get("submit_count", 0)) > 0:
+                    last_submit_ts_ms = int(latest_open_time)
+                state = LiveRuntimeState(
+                    last_processed_open_time=int(latest_open_time),
+                    last_submit_ts_ms=last_submit_ts_ms,
+                )
+                save_live_state(state_path, state)
+
+            cycles += 1
+            if config.max_cycles is not None and cycles >= config.max_cycles:
+                break
+            sleep_fn(config.poll_seconds)
+    finally:
+        if started and last_context is not None:
+            strategy.on_finish(last_context)
+
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    config = LiveRunConfig.from_argv(argv)
+    return run_live_loop(config)
 
 
 __all__ = [
@@ -204,6 +283,7 @@ __all__ = [
     "check_risk",
     "decision_to_intent",
     "main",
+    "run_live_loop",
     "run_once",
     "validate_live_mode",
 ]
