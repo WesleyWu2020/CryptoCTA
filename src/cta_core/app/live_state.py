@@ -65,10 +65,14 @@ def _coerce_optional_int(value: object) -> int | None:
         return None
     if isinstance(value, int):
         return value
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 __all__ = ["LiveRuntimeState", "load_live_state", "save_live_state"]
