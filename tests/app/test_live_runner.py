@@ -458,7 +458,7 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
         run_once_calls.append(kwargs)
         bars = kwargs["bars"]
         assert isinstance(bars, pl.DataFrame)
-        assert bars.get_column("open_time").to_list() == [1_000, 2_000]
+        assert bars.get_column("open_time").to_list() == [2_000]
         return {
             "latest_open_time": 2_000,
             "submit_count": 1,
@@ -486,7 +486,7 @@ def test_run_live_loop_processes_only_new_closed_bar(monkeypatch: pytest.MonkeyP
 
     assert result == 0
     assert len(run_once_calls) == 1
-    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [1_000, 2_000]
+    assert run_once_calls[0]["bars"].get_column("open_time").to_list() == [2_000]
     assert saved_states[-1].last_processed_open_time == 2_000
     assert saved_states[-1].last_submit_ts_ms == 2_000
     assert strategy.started is True
