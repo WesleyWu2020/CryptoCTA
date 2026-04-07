@@ -1,4 +1,5 @@
 .worktrees/
 artifacts/market_data/*.duckdb
+artifacts/live_state/
 __pycache__/
 *.pyc
